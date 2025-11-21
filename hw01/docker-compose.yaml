@@ -1,0 +1,42 @@
+services:
+  user-service-db:
+    image: postgres:17.2-alpine
+    environment: &pg-env
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck: &pg-healthcheck
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      retries: 5
+      timeout: 2s
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./user-service-db/up:/docker-entrypoint-initdb.d
+      - user-service-db-data:/var/lib/postgresql/data
+
+  order-service-db:
+    image: postgres:17.2-alpine
+    environment: *pg-env
+    healthcheck: *pg-healthcheck
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./order-service-db/up:/docker-entrypoint-initdb.d
+      - order-service-db-data:/var/lib/postgresql/data
+
+  logistics-service-db:
+    image: postgres:17.2-alpine
+    environment: *pg-env
+    healthcheck: *pg-healthcheck
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./logistics-service-db/up:/docker-entrypoint-initdb.d
+      - logistics-service-db-data:/var/lib/postgresql/data
+
+volumes:
+  user-service-db-data:
+  order-service-db-data:
+  logistics-service-db-data:
