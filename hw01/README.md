@@ -19,3 +19,9 @@ docker-compose down
 ```bash
 docker-compose logs -f
 ```
+
+## Вставка моковых данных
+
+```bash
+./load_csv.sh ~/Downloads/mock_data/order_service_orders.csv ORDERS postgresql://postgres:postgres@localhost:5433/postgres
+```
