@@ -3,6 +3,6 @@
 
 Выполняют студенты ПИ
 
-- Зенин Вадим (tg: [@zuganin](https://t.me/zuganin)
-- Клычков Максим (tg: [@maklybae](https://t.me/maklybae)
-- Семкин Арсений (tg: [@arsemkin](https://t.me/arsemkin)
+- Зенин Вадим (tg: [@zuganin](https://t.me/zuganin))
+- Клычков Максим (tg: [@maklybae](https://t.me/maklybae))
+- Семкин Арсений (tg: [@arsemkin](https://t.me/arsemkin))
