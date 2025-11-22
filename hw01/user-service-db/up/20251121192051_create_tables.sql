@@ -48,11 +48,6 @@ CREATE TABLE IF NOT EXISTS USER_STATUS_HISTORY (
     ip_address INET,
     
     user_agent TEXT,
-
-    CONSTRAINT fk_user_history_user 
-        FOREIGN KEY (user_external_id) 
-        REFERENCES USERS (user_external_id)
-        ON DELETE CASCADE
 );
 
 
@@ -86,10 +81,6 @@ CREATE TABLE IF NOT EXISTS USERS_ADDRESSES (
     created_by VARCHAR(100),
     updated_by VARCHAR(100),
 
-    CONSTRAINT fk_user_addresses_user 
-        FOREIGN KEY (user_external_id) 
-        REFERENCES USERS (user_external_id)
-        ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN USERS_ADDRESSES.address_external_id IS 'Business Key';

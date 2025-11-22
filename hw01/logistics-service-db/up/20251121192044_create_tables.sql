@@ -67,10 +67,6 @@ CREATE TABLE IF NOT EXISTS shipment_movements (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(100),
 
-    CONSTRAINT fk_movements_shipment 
-        FOREIGN KEY (shipment_external_id) 
-        REFERENCES shipments (shipment_external_id)
-        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_movements_shipment_id ON shipment_movements(shipment_external_id);
@@ -94,10 +90,6 @@ CREATE TABLE IF NOT EXISTS shipment_status_history (
     notes TEXT,
     customer_notified BOOLEAN DEFAULT FALSE,
 
-    CONSTRAINT fk_status_history_shipment 
-        FOREIGN KEY (shipment_external_id) 
-        REFERENCES shipments (shipment_external_id)
-        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_status_history_shipment_id ON shipment_status_history(shipment_external_id);

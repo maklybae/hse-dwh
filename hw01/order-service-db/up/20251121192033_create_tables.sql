@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS ORDERS_STATUS_HISTORY (
     -- PK
     history_id SERIAL PRIMARY KEY,
 
-    -- FK: Ссылка на таблицу orders (в этой же БД)
+    -- FK: Ссылка на таблицу orders 
     order_external_id UUID NOT NULL,
 
     old_status VARCHAR(50),
@@ -57,11 +57,6 @@ CREATE TABLE IF NOT EXISTS ORDERS_STATUS_HISTORY (
     ip_address INET,
 
     notes TEXT,
-
-    CONSTRAINT fk_order_history_order 
-        FOREIGN KEY (order_external_id) 
-        REFERENCES orders (order_external_id)
-        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_order_history_order_ext_id 
@@ -90,10 +85,6 @@ CREATE TABLE IF NOT EXISTS ORDER_ITEMS (
     created_by VARCHAR(100),
     updated_by VARCHAR(100),
 
-    CONSTRAINT fk_order_items_order 
-        FOREIGN KEY (order_external_id) 
-        REFERENCES orders (order_external_id)
-        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON ORDER_ITEMS(order_external_id);
@@ -104,7 +95,7 @@ CREATE TABLE IF NOT EXISTS PRODUCTS (
     -- PK: Суррогатный ключ
     product_id SERIAL PRIMARY KEY,
 
-    -- UK: Business Key (Артикул товара)
+    -- UK: Business Key 
     product_sku VARCHAR(100) NOT NULL UNIQUE,
 
     product_name VARCHAR(255) NOT NULL,
@@ -125,7 +116,6 @@ CREATE TABLE IF NOT EXISTS PRODUCTS (
     effective_to TIMESTAMP,
     is_current BOOLEAN DEFAULT TRUE,
 
-    -- Audit Columns
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     created_by VARCHAR(100),
