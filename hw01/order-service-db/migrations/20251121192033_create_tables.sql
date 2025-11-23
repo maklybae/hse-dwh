@@ -1,5 +1,6 @@
+-- +goose Up
+-- +goose StatementBegin
 SELECT 'up SQL query';
-
 
 CREATE TABLE IF NOT EXISTS ORDERS (
     order_id SERIAL PRIMARY KEY,
@@ -124,3 +125,14 @@ CREATE TABLE IF NOT EXISTS PRODUCTS (
 CREATE INDEX IF NOT EXISTS idx_products_category ON PRODUCTS(category);
 CREATE INDEX IF NOT EXISTS idx_products_brand ON PRODUCTS(brand);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON PRODUCTS(is_active);
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+SELECT 'down SQL query';
+
+DROP TABLE IF EXISTS PRODUCTS;
+DROP TABLE IF EXISTS ORDER_ITEMS;
+DROP TABLE IF EXISTS ORDER_STATUS_HISTORY;
+DROP TABLE IF EXISTS ORDERS;
+-- +goose StatementEnd

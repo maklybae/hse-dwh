@@ -1,3 +1,5 @@
+-- +goose Up
+-- +goose StatementBegin
 SELECT 'up SQL query';
 
 CREATE TABLE IF NOT EXISTS SHIPMENTS (
@@ -167,3 +169,15 @@ CREATE TABLE IF NOT EXISTS PICKUP_POINTS (
 
 CREATE INDEX IF NOT EXISTS idx_pickup_points_city ON PICKUP_POINTS(city);
 CREATE INDEX IF NOT EXISTS idx_pickup_points_type ON PICKUP_POINTS(pickup_point_type);
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+SELECT 'down SQL query';
+
+DROP TABLE IF EXISTS PICKUP_POINTS;
+DROP TABLE IF EXISTS WAREHOUSES;
+DROP TABLE IF EXISTS SHIPMENT_STATUS_HISTORY;
+DROP TABLE IF EXISTS SHIPMENT_MOVEMENTS;
+DROP TABLE IF EXISTS SHIPMENTS;
+-- +goose StatementEnd
