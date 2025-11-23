@@ -1,6 +1,6 @@
 SELECT 'up SQL query';
 
-CREATE TABLE IF NOT EXISTS shipments (
+CREATE TABLE IF NOT EXISTS SHIPMENTS (
     -- PK
     shipment_id SERIAL PRIMARY KEY,
 
@@ -44,11 +44,11 @@ CREATE TABLE IF NOT EXISTS shipments (
     updated_by VARCHAR(100)
 );
 
-CREATE INDEX IF NOT EXISTS idx_shipments_order_ext_id ON shipments(order_external_id);
-CREATE INDEX IF NOT EXISTS idx_shipments_address_ext_id ON shipments(destination_address_external_id);
+CREATE INDEX IF NOT EXISTS idx_shipments_order_ext_id ON SHIPMENTS(order_external_id);
+CREATE INDEX IF NOT EXISTS idx_shipments_address_ext_id ON SHIPMENTS(destination_address_external_id);
 
 
-CREATE TABLE IF NOT EXISTS shipment_movements (
+CREATE TABLE IF NOT EXISTS SHIPMENT_MOVEMENTS (
     movement_id SERIAL PRIMARY KEY,
 
     -- FK: Связь с таблицей shipments
@@ -65,13 +65,12 @@ CREATE TABLE IF NOT EXISTS shipment_movements (
     longitude DECIMAL(11, 8),
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(100),
-
+    created_by VARCHAR(100)
 );
 
-CREATE INDEX IF NOT EXISTS idx_movements_shipment_id ON shipment_movements(shipment_external_id);
+CREATE INDEX IF NOT EXISTS idx_movements_shipment_id ON SHIPMENT_MOVEMENTS(shipment_external_id);
 
-CREATE TABLE IF NOT EXISTS shipment_status_history (
+CREATE TABLE IF NOT EXISTS SHIPMENT_STATUS_HISTORY (
     history_id SERIAL PRIMARY KEY,
 
     -- FK: Связь с таблицей shipments
@@ -88,13 +87,12 @@ CREATE TABLE IF NOT EXISTS shipment_status_history (
     location_code VARCHAR(50),
     
     notes TEXT,
-    customer_notified BOOLEAN DEFAULT FALSE,
-
+    customer_notified BOOLEAN DEFAULT FALSE
 );
 
-CREATE INDEX IF NOT EXISTS idx_status_history_shipment_id ON shipment_status_history(shipment_external_id);
+CREATE INDEX IF NOT EXISTS idx_status_history_shipment_id ON SHIPMENT_STATUS_HISTORY(shipment_external_id);
 
-CREATE TABLE IF NOT EXISTS warehouses (
+CREATE TABLE IF NOT EXISTS WAREHOUSES (
     -- PK
     warehouse_id SERIAL PRIMARY KEY,
 
@@ -129,11 +127,11 @@ CREATE TABLE IF NOT EXISTS warehouses (
 );
 
 
-CREATE INDEX IF NOT EXISTS idx_warehouses_city ON warehouses(city);
-CREATE INDEX IF NOT EXISTS idx_warehouses_is_active ON warehouses(is_active);
+CREATE INDEX IF NOT EXISTS idx_warehouses_city ON WAREHOUSES(city);
+CREATE INDEX IF NOT EXISTS idx_warehouses_is_active ON WAREHOUSES(is_active);
 
 
-CREATE TABLE IF NOT EXISTS pickup_points (
+CREATE TABLE IF NOT EXISTS PICKUP_POINTS (
     -- PK
     pickup_point_id SERIAL PRIMARY KEY,
 
@@ -167,5 +165,5 @@ CREATE TABLE IF NOT EXISTS pickup_points (
     updated_by VARCHAR(100)
 );
 
-CREATE INDEX IF NOT EXISTS idx_pickup_points_city ON pickup_points(city);
-CREATE INDEX IF NOT EXISTS idx_pickup_points_type ON pickup_points(pickup_point_type);
+CREATE INDEX IF NOT EXISTS idx_pickup_points_city ON PICKUP_POINTS(city);
+CREATE INDEX IF NOT EXISTS idx_pickup_points_type ON PICKUP_POINTS(pickup_point_type);

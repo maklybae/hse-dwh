@@ -47,13 +47,13 @@ CREATE TABLE IF NOT EXISTS USER_STATUS_HISTORY (
     
     ip_address INET,
     
-    user_agent TEXT,
+    user_agent TEXT
 );
 
 
 COMMENT ON COLUMN USER_STATUS_HISTORY.user_external_id IS 'Business Key';
 
-CREATE TABLE IF NOT EXISTS USERS_ADDRESSES (
+CREATE TABLE IF NOT EXISTS USER_ADDRESSES (
     -- PK: Primary Key
     address_id SERIAL PRIMARY KEY,
 
@@ -79,12 +79,11 @@ CREATE TABLE IF NOT EXISTS USERS_ADDRESSES (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     created_by VARCHAR(100),
-    updated_by VARCHAR(100),
-
+    updated_by VARCHAR(100)
 );
 
-COMMENT ON COLUMN USERS_ADDRESSES.address_external_id IS 'Business Key';
-COMMENT ON COLUMN USERS_ADDRESSES.user_external_id IS 'Business Key';
-COMMENT ON COLUMN USERS_ADDRESSES.effective_from IS 'SCD Type 2';
-COMMENT ON COLUMN USERS_ADDRESSES.effective_to IS 'SCD Type 2';
-COMMENT ON COLUMN USERS_ADDRESSES.is_current IS 'SCD Type 2';
+COMMENT ON COLUMN USER_ADDRESSES.address_external_id IS 'Business Key';
+COMMENT ON COLUMN USER_ADDRESSES.user_external_id IS 'Business Key';
+COMMENT ON COLUMN USER_ADDRESSES.effective_from IS 'SCD Type 2';
+COMMENT ON COLUMN USER_ADDRESSES.effective_to IS 'SCD Type 2';
+COMMENT ON COLUMN USER_ADDRESSES.is_current IS 'SCD Type 2';

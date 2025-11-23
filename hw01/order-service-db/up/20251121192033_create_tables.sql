@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS ORDERS (
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_ext_id ON ORDERS(user_external_id);
 
-CREATE TABLE IF NOT EXISTS ORDERS_STATUS_HISTORY (
+CREATE TABLE IF NOT EXISTS ORDER_STATUS_HISTORY (
     -- PK
     history_id SERIAL PRIMARY KEY,
 
@@ -56,11 +56,11 @@ CREATE TABLE IF NOT EXISTS ORDERS_STATUS_HISTORY (
     
     ip_address INET,
 
-    notes TEXT,
+    notes TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_order_history_order_ext_id 
-    ON ORDERS_STATUS_HISTORY(order_external_id);
+CREATE INDEX IF NOT EXISTS idx_order_history_order_ext_id
+    ON ORDER_STATUS_HISTORY(order_external_id);
 
 CREATE TABLE IF NOT EXISTS ORDER_ITEMS (
     -- PK
@@ -83,8 +83,7 @@ CREATE TABLE IF NOT EXISTS ORDER_ITEMS (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     created_by VARCHAR(100),
-    updated_by VARCHAR(100),
-
+    updated_by VARCHAR(100)
 );
 
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON ORDER_ITEMS(order_external_id);
