@@ -1,42 +1,344 @@
 services:
-  user-service-db:
-    image: postgres:17.2-alpine
-    environment: &pg-env
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    healthcheck: &pg-healthcheck
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
-      interval: 5s
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.10
+    container_name: etcd
+    environment:
+      ETCD_NAME: etcd
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd:2380
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ETCD_INITIAL_CLUSTER: etcd=http://etcd:2380
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ETCD_INITIAL_CLUSTER_TOKEN: etcd-cluster
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    networks:
+      - postgres-ha-net
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      timeout: 2s
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./user-service-db/up:/docker-entrypoint-initdb.d
-      - user-service-db-data:/var/lib/postgresql/data
 
-  order-service-db:
-    image: postgres:17.2-alpine
-    environment: *pg-env
-    healthcheck: *pg-healthcheck
-    ports:
-      - "5433:5432"
+  user-haproxy:
+    image: haproxy:3.2.9-alpine
+    container_name: user-haproxy
     volumes:
-      - ./order-service-db/up:/docker-entrypoint-initdb.d
-      - order-service-db-data:/var/lib/postgresql/data
+      - ./haproxy-configs/user-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5432:5432" # PostgreSQL
+      - "7001:7000" # Stats UI
+    networks:
+      - postgres-ha-net
+    depends_on:
+      pg-user-1:
+        condition: service_healthy
+      pg-user-2:
+        condition: service_healthy
+      pg-user-3:
+        condition: service_healthy
+    healthcheck: &haproxy_healthcheck_anchor
+      test: ["CMD-SHELL", "nc -z -w 2 127.0.0.1 5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
-  logistics-service-db:
-    image: postgres:17.2-alpine
-    environment: *pg-env
-    healthcheck: *pg-healthcheck
-    ports:
-      - "5434:5432"
+  order-haproxy:
+    image: haproxy:3.2.9-alpine
+    container_name: order-haproxy
     volumes:
-      - ./logistics-service-db/up:/docker-entrypoint-initdb.d
-      - logistics-service-db-data:/var/lib/postgresql/data
+      - ./haproxy-configs/order-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5433:5432" # PostgreSQL
+      - "7002:7000" # Stats UI
+    networks:
+      - postgres-ha-net
+    depends_on:
+      pg-order-1:
+        condition: service_healthy
+      pg-order-2:
+        condition: service_healthy
+      pg-order-3:
+        condition: service_healthy
+    healthcheck: *haproxy_healthcheck_anchor
+
+  logistics-haproxy:
+    image: haproxy:3.2.9-alpine
+    container_name: logistics-haproxy
+    volumes:
+      - ./haproxy-configs/logistics-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5434:5432" # PostgreSQL
+      - "7003:7000" # Stats UI
+    networks:
+      - postgres-ha-net
+    depends_on:
+      pg-logistics-1:
+        condition: service_healthy
+      pg-logistics-2:
+        condition: service_healthy
+      pg-logistics-3:
+        condition: service_healthy
+    healthcheck: *haproxy_healthcheck_anchor
+
+  user-migrations:
+    image: kukymbr/goose-docker:3.23.0
+    container_name: user-migrations
+    restart: on-failure
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "host=user-haproxy port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
+    volumes:
+      - ./user-service-db/migrations:/migrations:ro
+    command: ["up"]
+    networks:
+      - postgres-ha-net
+    depends_on:
+      user-haproxy:
+        condition: service_healthy
+
+  order-migrations:
+    image: kukymbr/goose-docker:3.23.0
+    container_name: order-migrations
+    restart: on-failure
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "host=order-haproxy port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
+    volumes:
+      - ./order-service-db/migrations:/migrations:ro
+    command: ["up"]
+    networks:
+      - postgres-ha-net
+    depends_on:
+      order-haproxy:
+        condition: service_healthy
+
+  logistics-migrations:
+    image: kukymbr/goose-docker:3.23.0
+    container_name: logistics-migrations
+    restart: on-failure
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "host=logistics-haproxy port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
+    volumes:
+      - ./logistics-service-db/migrations:/migrations:ro
+    command: ["up"]
+    networks:
+      - postgres-ha-net
+    depends_on:
+      logistics-haproxy:
+        condition: service_healthy
+
+  pg-user-1:
+    build: ./containers/patroni
+    container_name: pg-user-1
+    user: postgres
+    environment:
+      PATRONI_SCOPE: user-service-cluster
+      PATRONI_NAME: pg-user-1
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-user-1:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-user-1:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5001:5432"
+      - "8001:8008"
+    volumes:
+      - pg-user-1-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: &pg_node_healthcheck_anchor
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  pg-user-2:
+    build: ./containers/patroni
+    container_name: pg-user-2
+    user: postgres
+    environment:
+      PATRONI_SCOPE: user-service-cluster
+      PATRONI_NAME: pg-user-2
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-user-2:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-user-2:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5002:5432"
+      - "8002:8008"
+    volumes:
+      - pg-user-2-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+  pg-user-3:
+    build: ./containers/patroni
+    container_name: pg-user-3
+    user: postgres
+    environment:
+      PATRONI_SCOPE: user-service-cluster
+      PATRONI_NAME: pg-user-3
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-user-3:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-user-3:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5003:5432"
+      - "8003:8008"
+    volumes:
+      - pg-user-3-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+  pg-order-1:
+    build: ./containers/patroni
+    container_name: pg-order-1
+    user: postgres
+    environment:
+      PATRONI_SCOPE: order-service-cluster
+      PATRONI_NAME: pg-order-1
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-order-1:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-order-1:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5011:5432"
+      - "8011:8008"
+    volumes:
+      - pg-order-1-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+  pg-order-2:
+    build: ./containers/patroni
+    container_name: pg-order-2
+    user: postgres
+    environment:
+      PATRONI_SCOPE: order-service-cluster
+      PATRONI_NAME: pg-order-2
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-order-2:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-order-2:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5012:5432"
+      - "8012:8008"
+    volumes:
+      - pg-order-2-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+  pg-order-3:
+    build: ./containers/patroni
+    container_name: pg-order-3
+    user: postgres
+    environment:
+      PATRONI_SCOPE: order-service-cluster
+      PATRONI_NAME: pg-order-3
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-order-3:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-order-3:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5013:5432"
+      - "8013:8008"
+    volumes:
+      - pg-order-3-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+  pg-logistics-1:
+    build: ./containers/patroni
+    container_name: pg-logistics-1
+    user: postgres
+    environment:
+      PATRONI_SCOPE: logistics-service-cluster
+      PATRONI_NAME: pg-logistics-1
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-logistics-1:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-logistics-1:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5021:5432"
+      - "8021:8008"
+    volumes:
+      - pg-logistics-1-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+  pg-logistics-2:
+    build: ./containers/patroni
+    container_name: pg-logistics-2
+    user: postgres
+    environment:
+      PATRONI_SCOPE: logistics-service-cluster
+      PATRONI_NAME: pg-logistics-2
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-logistics-2:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-logistics-2:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5022:5432"
+      - "8022:8008"
+    volumes:
+      - pg-logistics-2-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+  pg-logistics-3:
+    build: ./containers/patroni
+    container_name: pg-logistics-3
+    user: postgres
+    environment:
+      PATRONI_SCOPE: logistics-service-cluster
+      PATRONI_NAME: pg-logistics-3
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-logistics-3:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-logistics-3:5432
+    networks:
+      - postgres-ha-net
+    ports:
+      - "5023:5432"
+      - "8023:8008"
+    volumes:
+      - pg-logistics-3-data:/var/lib/postgresql/data
+    depends_on:
+      etcd:
+        condition: service_healthy
+    healthcheck: *pg_node_healthcheck_anchor
+
+networks:
+  postgres-ha-net:
+    driver: bridge
 
 volumes:
-  user-service-db-data:
-  order-service-db-data:
-  logistics-service-db-data:
+  # User service cluster volumes
+  pg-user-1-data:
+  pg-user-2-data:
+  pg-user-3-data:
+  # Order service cluster volumes
+  pg-order-1-data:
+  pg-order-2-data:
+  pg-order-3-data:
+  # Logistics service cluster volumes
+  pg-logistics-1-data:
+  pg-logistics-2-data:
+  pg-logistics-3-data:
