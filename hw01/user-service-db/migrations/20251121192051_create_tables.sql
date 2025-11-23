@@ -1,3 +1,5 @@
+-- +goose Up
+-- +goose StatementBegin
 SELECT 'up SQL query';
 
 CREATE TABLE IF NOT EXISTS USERS (
@@ -87,3 +89,13 @@ COMMENT ON COLUMN USER_ADDRESSES.user_external_id IS 'Business Key';
 COMMENT ON COLUMN USER_ADDRESSES.effective_from IS 'SCD Type 2';
 COMMENT ON COLUMN USER_ADDRESSES.effective_to IS 'SCD Type 2';
 COMMENT ON COLUMN USER_ADDRESSES.is_current IS 'SCD Type 2';
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+SELECT 'down SQL query';
+
+DROP TABLE IF EXISTS USER_ADDRESSES;
+DROP TABLE IF EXISTS USER_STATUS_HISTORY;
+DROP TABLE IF EXISTS USERS;
+-- +goose StatementEnd
