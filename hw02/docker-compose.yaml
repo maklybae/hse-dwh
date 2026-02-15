@@ -29,6 +29,7 @@ services:
       - ./haproxy-configs/user-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "5432:5432" # PostgreSQL
+      - "5332:5332" # PostgreSQL Replicas
       - "7001:7000" # Stats UI
     networks:
       - postgres-ha-net
@@ -52,6 +53,7 @@ services:
       - ./haproxy-configs/order-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "5433:5432" # PostgreSQL
+      - "5333:5332" # PostgreSQL Replicas
       - "7002:7000" # Stats UI
     networks:
       - postgres-ha-net
@@ -71,6 +73,7 @@ services:
       - ./haproxy-configs/logistics-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "5434:5432" # PostgreSQL
+      - "5334:5332" # PostgreSQL Replicas
       - "7003:7000" # Stats UI
     networks:
       - postgres-ha-net
