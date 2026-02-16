@@ -9,6 +9,7 @@
         "database.password": "postgres",
         "database.dbname": "postgres",
         "topic.prefix": "debezium-logistics-service",
+        "table.exclude.list": "public.goose_db_version",
         "heartbeat.interval.ms": "5000"
     }
 }

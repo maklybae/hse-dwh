@@ -9,7 +9,7 @@
         "database.password": "postgres",
         "database.dbname": "postgres",
         "topic.prefix": "debezium-order-service",
-        "table.include.list": "public.(.*)",
+        "table.exclude.list": "public.goose_db_version",
         "heartbeat.interval.ms": "5000"
     }
 }
