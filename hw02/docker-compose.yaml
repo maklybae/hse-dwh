@@ -86,6 +86,19 @@ services:
         condition: service_healthy
     healthcheck: *haproxy_healthcheck_anchor
 
+  # noop service to join all migrations together
+  migrations:
+    image: busybox:1.37.0
+    container_name: migrations
+    depends_on:
+      user-migrations:
+        condition: service_completed_successfully
+      order-migrations:
+        condition: service_completed_successfully
+      logistics-migrations:
+        condition: service_completed_successfully
+    command: ["echo", "All migrations completed successfully!"]
+
   user-migrations:
     image: kukymbr/goose-docker:3.23.0
     container_name: user-migrations
@@ -343,6 +356,11 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    volumes:
+      - kafka-data:/data
+      - kafka-kafka-data:/kafka/data
+      - kafka-kafka-config:/kafka/config
+      - kafka-kafka-logs:/kafka/logs
     networks:
       - postgres-ha-net
     healthcheck:
@@ -370,19 +388,39 @@ services:
     depends_on:
       debezium-kafka:
         condition: service_healthy
-      user-haproxy:
-        condition: service_healthy
-      order-haproxy:
-        condition: service_healthy
-      logistics-haproxy:
-        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
     networks:
       - postgres-ha-net
+    volumes:
+      - connect-kafka-data:/kafka/data
+      - connect-kafka-config:/kafka/config
+      - connect-kafka-logs:/kafka/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  debezium-connect-init:
+    image: curlimages/curl:8.18.0
+    container_name: debezium-connect-init
+    environment:
+      BASE_URL: http://debezium-connect:8083
+    restart: on-failure:2
+    depends_on:
+      debezium-connect:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/create.sh"]
+    command:
+      - "/configs/user-service-config.json"
+      - "/configs/order-service-config.json"
+      - "/configs/logistics-service-config.json"
+    volumes:
+      - ./connector-configs:/configs:ro
+      - ./scripts/create-connectors.sh:/create.sh:ro
+    networks:
+      - postgres-ha-net
 
 networks:
   postgres-ha-net:
@@ -401,3 +439,11 @@ volumes:
   pg-logistics-1-data:
   pg-logistics-2-data:
   pg-logistics-3-data:
+  # Kafka volumes
+  kafka-data:
+  kafka-kafka-data:
+  kafka-kafka-config:
+  kafka-kafka-logs:
+  connect-kafka-data:
+  connect-kafka-config:
+  connect-kafka-logs:

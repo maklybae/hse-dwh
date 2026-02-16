@@ -20,10 +20,14 @@ bootstrap:
     maximum_lag_on_failover: 1048576
     postgresql:
       use_pg_rewind: true
+      use_slots: true # Required for Debezium CDC
       parameters:
         max_connections: 200
         max_locks_per_transaction: 256
         max_worker_processes: 8
+        wal_level: logical
+        max_replication_slots: 10
+        max_wal_senders: 10
 
   initdb:
     - encoding: UTF8
