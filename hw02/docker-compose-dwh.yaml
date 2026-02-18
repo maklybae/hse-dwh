@@ -1,0 +1,214 @@
+services:
+  # MinIO - S3-compatible object storage для хранения данных DWH
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
+    container_name: dwh-minio
+    ports:
+      - "9000:9000"      # API endpoint
+      - "9001:9001"      # Web Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - dwh-net
+
+  # Healthcheck для MinIO через отдельный контейнер с curl
+  minio-healthcheck:
+    image: curlimages/curl:8.18.0
+    container_name: dwh-minio-healthcheck
+    restart: "no"
+    depends_on:
+      - minio
+    command: >
+      sh -c "
+      max_attempts=30;
+      attempt=0;
+      until curl -fsS http://minio:9000/minio/health/ready || [ $$attempt -ge $$max_attempts ]; do
+        attempt=$$((attempt + 1));
+        echo \"Waiting for MinIO to be ready... ($$attempt/$$max_attempts)\";
+        sleep 2;
+      done;
+      if [ $$attempt -ge $$max_attempts ]; then
+        echo 'MinIO failed to become ready in time';
+        exit 1;
+      fi;
+      echo 'MinIO is ready!';
+      "
+    networks:
+      - dwh-net
+
+  # Создание buckets в MinIO
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: dwh-minio-init
+    restart: "no"
+    depends_on:
+      minio-healthcheck:
+        condition: service_completed_successfully
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb --ignore-existing myminio/warehouse;
+      /usr/bin/mc mb --ignore-existing myminio/staging;
+      echo 'MinIO buckets created successfully';
+      exit 0;
+      "
+    networks:
+      - dwh-net
+
+  # PostgreSQL для Hive Metastore (каталог таблиц Iceberg)
+  metastore-db:
+    image: postgres:16-alpine
+    container_name: dwh-metastore-db
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hivepassword
+      POSTGRES_DB: metastore
+    ports:
+      - "5436:5432"
+    volumes:
+      - metastore-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dwh-net
+
+  # Hive Metastore - каталог для Iceberg таблиц
+  hive-metastore:
+    build:
+      context: ./containers/hive
+      dockerfile: Dockerfile
+    container_name: dwh-hive-metastore
+    depends_on:
+      metastore-db:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+    ports:
+      - "9083:9083"
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9083"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # Spark Master - координатор Spark кластера
+  spark-master:
+    build:
+      context: ./dwh-spark
+      dockerfile: Dockerfile
+    image: spark-with-iceberg:4.0.1
+    container_name: dwh-spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+    ports:
+      - "8080:8080"      # Spark Master Web UI
+      - "7077:7077"      # Spark Master port
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - ./dwh-spark/apps:/opt/spark-apps:rw
+      - ./dwh-spark/scripts:/opt/scripts:ro
+      - spark-ivy:/opt/spark/.ivy2
+    networks:
+      - dwh-net
+      - postgres-ha-net
+
+  # Spark Worker - исполнитель задач
+  spark-worker:
+    image: spark-with-iceberg:4.0.1
+    container_name: dwh-spark-worker
+    depends_on:
+      - spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+    ports:
+      - "8081:8081"      # Spark Worker Web UI
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - ./dwh-spark/apps:/opt/spark-apps:rw
+      - spark-ivy:/opt/spark/.ivy2
+    networks:
+      - dwh-net
+      - postgres-ha-net
+
+  # DMP Service - ETL процесс на Spark
+  dwh-dmp:
+    image: spark-with-iceberg:4.0.1
+    container_name: dwh-dmp
+    hostname: dwh-dmp
+    depends_on:
+      spark-master:
+        condition: service_started
+      hive-metastore:
+        condition: service_healthy
+      minio-healthcheck:
+        condition: service_completed_successfully
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - KAFKA_BOOTSTRAP_SERVERS=debezium-kafka:9092
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - HIVE_METASTORE_URI=thrift://hive-metastore:9083
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - SPARK_HOME=/opt/spark
+    volumes:
+      - ./dwh-spark/apps:/opt/spark-apps:rw
+      - ./dwh-spark/scripts:/opt/scripts:ro
+      - spark-ivy:/opt/spark/.ivy2
+    networks:
+      - dwh-net
+      - postgres-ha-net
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1
+      --conf spark.jars.ivy=/opt/spark/.ivy2
+      --conf spark.executor.memory=1g
+      --conf spark.driver.memory=1g
+      --conf spark.driver.host=dwh-dmp
+      --conf spark.driver.bindAddress=0.0.0.0
+      --conf spark.executorEnv.AWS_REGION=us-east-1
+      --conf spark.executorEnv.AWS_ACCESS_KEY_ID=minioadmin
+      --conf spark.executorEnv.AWS_SECRET_ACCESS_KEY=minioadmin
+      --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000
+      --conf spark.hadoop.fs.s3a.path.style.access=true
+      --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false
+      --conf spark.hadoop.fs.s3a.access.key=minioadmin
+      --conf spark.hadoop.fs.s3a.secret.key=minioadmin
+      --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+      --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+      /opt/scripts/dmp_main.py
+
+networks:
+  dwh-net:
+    driver: bridge
+  postgres-ha-net:
+    external: true
+
+volumes:
+  minio-data:
+  metastore-db-data:
+  spark-ivy:
