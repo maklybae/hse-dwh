@@ -178,3 +178,6 @@ temp/
 *.pid
 *.seed
 *.pid.lock
+
+# Plans / internal working docs
+plans/
