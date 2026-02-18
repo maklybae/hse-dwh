@@ -10,6 +10,7 @@
         "database.dbname": "postgres",
         "topic.prefix": "debezium-user-service",
         "table.exclude.list": "public.goose_db_version",
-        "heartbeat.interval.ms": "5000"
+        "heartbeat.interval.ms": "5000",
+        "decimal.handling.mode": "double"
     }
 }
