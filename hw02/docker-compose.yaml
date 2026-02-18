@@ -424,6 +424,7 @@ services:
 
 networks:
   postgres-ha-net:
+    name: postgres-ha-net
     driver: bridge
 
 volumes:
