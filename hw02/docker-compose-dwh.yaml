@@ -59,53 +59,31 @@ services:
     networks:
       - dwh-net
 
-  # PostgreSQL для Hive Metastore (каталог таблиц Iceberg)
-  metastore-db:
-    image: postgres:16-alpine
-    container_name: dwh-metastore-db
-    environment:
-      POSTGRES_USER: hive
-      POSTGRES_PASSWORD: hivepassword
-      POSTGRES_DB: metastore
-    ports:
-      - "5436:5432"
-    volumes:
-      - metastore-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hive"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - dwh-net
-
-  # Hive Metastore - каталог для Iceberg таблиц
-  hive-metastore:
-    build:
-      context: ./containers/hive
-      dockerfile: Dockerfile
-    container_name: dwh-hive-metastore
+  # Iceberg REST Catalog - каталог для Iceberg таблиц
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture
+    container_name: dwh-iceberg-rest
     depends_on:
-      metastore-db:
-        condition: service_healthy
       minio-init:
         condition: service_completed_successfully
     environment:
-      SERVICE_NAME: metastore
-      DB_DRIVER: postgres
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
     ports:
-      - "9083:9083"
+      - "8181:8181"
     networks:
       - dwh-net
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "9083"]
-      interval: 15s
-      timeout: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8181/v1/config"]
+      interval: 10s
+      timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 10s
 
   # Spark Master - координатор Spark кластера
   spark-master:
@@ -159,7 +137,7 @@ services:
     depends_on:
       spark-master:
         condition: service_started
-      hive-metastore:
+      iceberg-rest:
         condition: service_healthy
       minio-healthcheck:
         condition: service_completed_successfully
@@ -169,7 +147,7 @@ services:
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
-      - HIVE_METASTORE_URI=thrift://hive-metastore:9083
+      - ICEBERG_REST_URI=http://iceberg-rest:8181
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
@@ -210,5 +188,4 @@ networks:
 
 volumes:
   minio-data:
-  metastore-db-data:
   spark-ivy:
