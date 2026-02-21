@@ -15,7 +15,7 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'http://minio:9000')
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
 MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', 'minioadmin')
-HIVE_METASTORE_URI = os.getenv('HIVE_METASTORE_URI', 'thrift://hive-metastore:9083')
+ICEBERG_REST_URI = os.getenv('ICEBERG_REST_URI', 'http://iceberg-rest:8181')
 
 def create_spark_session():
     logger.info("Creating Spark session...")
@@ -23,9 +23,9 @@ def create_spark_session():
     spark = SparkSession.builder \
         .appName("DWH-DMP-DataVault") \
         .config("spark.sql.catalog.iceberg", "org.apache.iceberg.spark.SparkCatalog") \
-        .config("spark.sql.catalog.iceberg.type", "hive") \
-        .config("spark.sql.catalog.iceberg.uri", HIVE_METASTORE_URI) \
-        .config("spark.sql.catalog.iceberg.warehouse", "s3a://warehouse/") \
+        .config("spark.sql.catalog.iceberg.type", "rest") \
+        .config("spark.sql.catalog.iceberg.uri", ICEBERG_REST_URI) \
+        .config("spark.sql.catalog.iceberg.warehouse", "s3://warehouse/") \
         .config("spark.sql.catalog.iceberg.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
         .config("spark.sql.catalog.iceberg.s3.endpoint", MINIO_ENDPOINT) \
         .config("spark.sql.catalog.iceberg.s3.path-style-access", "true") \
