@@ -342,7 +342,7 @@ sequenceDiagram
 |---|---|---|
 | **MinIO** | S3-совместимое объектное хранилище | Дисковая подсистема СУБД |
 | **Apache Iceberg** | Табличный формат (ACID, schema evolution, time travel) | Storage engine |
-| **Hive Metastore** | Каталог таблиц (через PostgreSQL для метаданных) | Системный каталог |
+| **Iceberg REST Catalog** | Каталог таблиц (встроенное хранилище метаданных) | Системный каталог |
 | **Apache Spark** | Движок обработки (MPP) | Query engine |
 
 ### Обоснование выбора
@@ -358,8 +358,7 @@ sequenceDiagram
 | Сервис | Образ | Назначение |
 |---|---|---|
 | `minio` | `minio/minio` | S3-хранилище данных |
-| `metastore-db` | `postgres:16-alpine` | PostgreSQL для метаданных Hive |
-| `hive-metastore` | custom build | Каталог Iceberg таблиц |
+| `iceberg-rest` | `apache/iceberg-rest-fixture` | Iceberg REST Catalog |
 | `spark-master` | `spark-with-iceberg:4.0.1` | Координатор кластера |
 | `spark-worker` | `spark-with-iceberg:4.0.1` | Исполнитель задач |
 | `dwh-dmp` | `spark-with-iceberg:4.0.1` | DMP streaming приложение |
@@ -428,6 +427,7 @@ LEFT JOIN iceberg.dwh_detailed.sat_order_details sod
 | Сервис | URL | Описание |
 |---|---|---|
 | MinIO Console | http://localhost:9001 | S3-хранилище (minioadmin/minioadmin) |
+| Iceberg REST Catalog | http://localhost:8181 | REST API каталога |
 | Spark Master | http://localhost:8080 | Spark кластер |
 | Spark Worker | http://localhost:8081 | Worker node |
 
