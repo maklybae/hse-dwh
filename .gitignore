@@ -179,5 +179,10 @@ temp/
 *.seed
 *.pid.lock
 
+# Spark
+metastore_db/
+spark-warehouse/
+derby.log
+
 # Plans / internal working docs
 plans/
