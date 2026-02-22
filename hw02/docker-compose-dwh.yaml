@@ -107,7 +107,6 @@ services:
       - spark-ivy:/opt/spark/.ivy2
     networks:
       - dwh-net
-      - postgres-ha-net
 
   # Spark Worker - исполнитель задач
   spark-worker:
@@ -127,7 +126,6 @@ services:
       - spark-ivy:/opt/spark/.ivy2
     networks:
       - dwh-net
-      - postgres-ha-net
 
   # DMP Service - ETL процесс на Spark
   dwh-dmp:
@@ -158,7 +156,7 @@ services:
       - spark-ivy:/opt/spark/.ivy2
     networks:
       - dwh-net
-      - postgres-ha-net
+      - kafka-net
     command: >
       /opt/spark/bin/spark-submit
       --master spark://spark-master:7077
@@ -182,8 +180,8 @@ services:
 
 networks:
   dwh-net:
-    driver: bridge
-  postgres-ha-net:
+    external: true
+  kafka-net:
     external: true
 
 volumes:

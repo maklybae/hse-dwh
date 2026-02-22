@@ -362,7 +362,7 @@ services:
       - kafka-kafka-config:/kafka/config
       - kafka-kafka-logs:/kafka/logs
     networks:
-      - postgres-ha-net
+      - kafka-net
     healthcheck:
       test:
         [
@@ -375,7 +375,11 @@ services:
       retries: 5
 
   debezium-connect:
-    image: quay.io/debezium/connect:3.4
+    build:
+      context: ./containers/connect
+      args:
+        DEBEZIUM_VERSION: "3.4"
+        ICEBERG_SINK_VERSION: "0.4.0"
     container_name: debezium-connect
     ports:
       - "8083:8083"
@@ -392,6 +396,8 @@ services:
         condition: service_completed_successfully
     networks:
       - postgres-ha-net
+      - kafka-net
+      - dwh-net
     volumes:
       - connect-kafka-data:/kafka/data
       - connect-kafka-config:/kafka/config
@@ -416,16 +422,22 @@ services:
       - "/configs/user-service-config.json"
       - "/configs/order-service-config.json"
       - "/configs/logistics-service-config.json"
+      - "/configs/iceberg-sink-user-service-config.json"
+      - "/configs/iceberg-sink-order-service-config.json"
+      - "/configs/iceberg-sink-logistics-service-config.json"
     volumes:
       - ./connector-configs:/configs:ro
       - ./scripts/create-connectors.sh:/create.sh:ro
     networks:
-      - postgres-ha-net
+      - kafka-net
 
 networks:
   postgres-ha-net:
-    name: postgres-ha-net
-    driver: bridge
+    external: true
+  kafka-net:
+    external: true
+  dwh-net:
+    external: true
 
 volumes:
   # User service cluster volumes
