@@ -206,6 +206,9 @@ services:
   #     /opt/scripts/dmp_main.py
 
   # dbt - запуск моделей Data Vault через Spark session
+  # Образ = только рантайм (Java + Spark + JARs + dbt).
+  # Проект монтируется — правки моделей видны без rebuild.
+  # Использование: docker compose run dwh-dbt run --profiles-dir .
   dwh-dbt:
     build:
       context: ./dbt
@@ -221,9 +224,12 @@ services:
         condition: service_healthy
     environment:
       - SPARK_HOME=/opt/spark
+      - SPARK_CONF_DIR=/opt/spark/conf
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - ./dbt/marketplace:/dbt/project
     networks:
       - dwh-net
-    entrypoint: ["dbt"]
     command: ["run", "--profiles-dir", "."]
 
 networks:
