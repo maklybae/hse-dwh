@@ -116,7 +116,6 @@ profile_default/
 ipython_config.py
 
 # Docker
-.dockerignore
 docker-compose.override.yml
 *.log
 

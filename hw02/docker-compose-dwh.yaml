@@ -205,6 +205,27 @@ services:
   #     --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
   #     /opt/scripts/dmp_main.py
 
+  # dbt - запуск моделей Data Vault через Spark session
+  dwh-dbt:
+    build:
+      context: ./dbt
+      dockerfile: Dockerfile
+    container_name: dwh-dbt
+    hostname: dwh-dbt
+    profiles:
+      - dbt
+    depends_on:
+      spark-master:
+        condition: service_started
+      iceberg-rest:
+        condition: service_healthy
+    environment:
+      - SPARK_HOME=/opt/spark
+    networks:
+      - dwh-net
+    entrypoint: ["dbt"]
+    command: ["run", "--profiles-dir", "."]
+
 networks:
   dwh-net:
     name: dwh-net
