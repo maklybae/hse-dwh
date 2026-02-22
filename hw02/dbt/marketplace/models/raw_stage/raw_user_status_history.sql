@@ -10,7 +10,9 @@ SELECT
     h.change_reason                         AS CHANGE_REASON,
     h.changed_at                            AS CHANGED_AT,
     h.changed_by                            AS CHANGED_BY,
-    h.session_id                            AS SESSION_ID
+    h.session_id                            AS SESSION_ID,
+    h.ip_address                            AS IP_ADDRESS,
+    h.user_agent                            AS USER_AGENT
 
 FROM {{ source('user_service', 'user_status_history') }} AS h
 {% if load_date %}
