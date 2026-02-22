@@ -22,6 +22,9 @@ clean-targets:         # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
 
+dispatch:
+  - macro_namespace: automate_dv
+    search_order: ['marketplace', 'automate_dv']
 
 # Configuring models
 # Full documentation: https://docs.getdbt.com/docs/configuring-models
@@ -31,6 +34,9 @@ clean-targets:         # directories to be removed by `dbt clean`
 # files using the `{{ config(...) }}` macro.
 models:
   marketplace:
-    # Config indicated by + and applies to all files under models/example/
-    example:
+    raw_stage:
       +materialized: view
+    stage:
+      +materialized: view
+    raw_vault:
+      +materialized: incremental
