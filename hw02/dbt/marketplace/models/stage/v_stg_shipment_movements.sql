@@ -27,5 +27,9 @@ WITH staging AS (
 )
 
 SELECT *,
+       {% if var("load_date", none) %}
        ('{{ var("load_date") }}')::DATE AS LOAD_DATE
+       {% else %}
+       CURRENT_DATE AS LOAD_DATE
+       {% endif %}
 FROM staging

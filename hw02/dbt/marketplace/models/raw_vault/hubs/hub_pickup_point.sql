@@ -1,4 +1,4 @@
-{%- set source_model = "v_stg_logistics" -%}
+{%- set source_model = "v_stg_pickup_points" -%}
 {%- set src_pk = "PICKUP_POINT_HK" -%}
 {%- set src_nk = "PICKUP_POINT_CODE" -%}
 {%- set src_ldts = "LOAD_DATE" -%}

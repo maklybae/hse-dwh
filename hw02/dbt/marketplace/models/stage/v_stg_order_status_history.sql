@@ -8,10 +8,12 @@ hashed_columns:
   SAT_ORDER_STATUS_HISTORY_HASHDIFF:
     is_hashdiff: true
     columns:
-      - 'ORDER_EXTERNAL_ID'
       - 'NEW_STATUS'
       - 'CHANGE_REASON'
       - 'NOTES'
+      - 'CHANGED_BY'
+      - 'SESSION_ID'
+      - 'IP_ADDRESS'
       - 'CHANGED_AT'
 {%- endset -%}
 
@@ -31,5 +33,9 @@ WITH staging AS (
 )
 
 SELECT *,
+       {% if var("load_date", none) %}
        ('{{ var("load_date") }}')::DATE AS LOAD_DATE
+       {% else %}
+       CURRENT_DATE AS LOAD_DATE
+       {% endif %}
 FROM staging

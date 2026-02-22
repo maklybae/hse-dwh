@@ -1,7 +1,9 @@
 {%- set source_model = "v_stg_orders" -%}
 {%- set src_pk = "LNK_ORDER_ITEM_HK" -%}
 {%- set src_hashdiff = "SAT_ORDER_ITEM_DETAILS_HASHDIFF" -%}
-{%- set src_payload = ["QUANTITY", "UNIT_PRICE", "PRODUCT_NAME_SNAP"] -%}
+{%- set src_payload = ["QUANTITY", "UNIT_PRICE", "TOTAL_PRICE",
+                       "PRODUCT_NAME_SNAPSHOT", "PRODUCT_CATEGORY_SNAPSHOT",
+                       "PRODUCT_BRAND_SNAPSHOT"] -%}
 {%- set src_eff = "EFFECTIVE_FROM" -%}
 {%- set src_ldts = "LOAD_DATE" -%}
 {%- set src_source = "RECORD_SOURCE" -%}
