@@ -5,10 +5,6 @@ derived_columns:
   EFFECTIVE_FROM: 'USER_EFFECTIVE_FROM'
 hashed_columns:
   USER_HK: 'USER_EXTERNAL_ID'
-  ADDRESS_HK: 'ADDRESS_EXTERNAL_ID'
-  LNK_USER_ADDRESS_HK:
-    - 'USER_EXTERNAL_ID'
-    - 'ADDRESS_EXTERNAL_ID'
   SAT_USER_DETAILS_HASHDIFF:
     is_hashdiff: true
     columns:
@@ -16,13 +12,8 @@ hashed_columns:
       - 'LAST_NAME'
       - 'EMAIL'
       - 'PHONE'
-  SAT_ADDRESS_DETAILS_HASHDIFF:
-    is_hashdiff: true
-    columns:
-      - 'COUNTRY'
-      - 'CITY'
-      - 'STREET_ADDRESS'
-      - 'POSTAL_CODE'
+      - 'DATE_OF_BIRTH'
+      - 'REGISTRATION_DATE'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}
@@ -41,5 +32,9 @@ WITH staging AS (
 )
 
 SELECT *,
+       {% if var("load_date", none) %}
        ('{{ var("load_date") }}')::DATE AS LOAD_DATE
+       {% else %}
+       CURRENT_DATE AS LOAD_DATE
+       {% endif %}
 FROM staging

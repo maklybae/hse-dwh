@@ -1,7 +1,9 @@
-{%- set source_model = "v_stg_users" -%}
+{%- set source_model = "v_stg_user_addresses" -%}
 {%- set src_pk = "ADDRESS_HK" -%}
 {%- set src_hashdiff = "SAT_ADDRESS_DETAILS_HASHDIFF" -%}
-{%- set src_payload = ["COUNTRY", "CITY", "STREET_ADDRESS", "POSTAL_CODE"] -%}
+{%- set src_payload = ["ADDRESS_TYPE", "COUNTRY", "REGION", "CITY",
+                       "STREET_ADDRESS", "POSTAL_CODE", "APARTMENT",
+                       "IS_DEFAULT_ADDRESS"] -%}
 {%- set src_eff = "EFFECTIVE_FROM" -%}
 {%- set src_ldts = "LOAD_DATE" -%}
 {%- set src_source = "RECORD_SOURCE" -%}

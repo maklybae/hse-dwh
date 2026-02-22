@@ -1,4 +1,4 @@
-{%- set source_model = "v_stg_logistics" -%}
+{%- set source_model = "v_stg_warehouses" -%}
 {%- set src_pk = "WAREHOUSE_HK" -%}
 {%- set src_nk = "WAREHOUSE_CODE" -%}
 {%- set src_ldts = "LOAD_DATE" -%}

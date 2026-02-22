@@ -1,21 +1,25 @@
 {%- set yaml_metadata -%}
-source_model: 'raw_user_status_history'
+source_model: 'raw_pickup_points'
 derived_columns:
-  RECORD_SOURCE: '!USER_SERVICE'
-  EFFECTIVE_FROM: 'CHANGED_AT'
+  RECORD_SOURCE: '!LOGISTICS_SERVICE'
+  EFFECTIVE_FROM: 'PICKUP_POINT_EFFECTIVE_FROM'
 hashed_columns:
-  USER_HK: 'USER_EXTERNAL_ID'
-  SAT_USER_STATUS_HASHDIFF:
+  PICKUP_POINT_HK: 'PICKUP_POINT_CODE'
+  SAT_PICKUP_POINT_DETAILS_HASHDIFF:
     is_hashdiff: true
     columns:
-      - 'OLD_STATUS'
-      - 'NEW_STATUS'
-      - 'CHANGE_REASON'
-      - 'CHANGED_BY'
-      - 'SESSION_ID'
-      - 'IP_ADDRESS'
-      - 'USER_AGENT'
-      - 'CHANGED_AT'
+      - 'PICKUP_POINT_NAME'
+      - 'PICKUP_POINT_TYPE'
+      - 'PICKUP_POINT_COUNTRY'
+      - 'PICKUP_POINT_REGION'
+      - 'PICKUP_POINT_CITY'
+      - 'PICKUP_POINT_STREET_ADDRESS'
+      - 'PICKUP_POINT_POSTAL_CODE'
+      - 'PICKUP_POINT_IS_ACTIVE'
+      - 'PICKUP_POINT_MAX_CAPACITY'
+      - 'PICKUP_POINT_OPERATING_HOURS'
+      - 'PICKUP_POINT_CONTACT_PHONE'
+      - 'PICKUP_POINT_PARTNER_NAME'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}

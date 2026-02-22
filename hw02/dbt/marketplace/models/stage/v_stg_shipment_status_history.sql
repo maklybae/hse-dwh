@@ -8,10 +8,13 @@ hashed_columns:
   SAT_SHIPMENT_STATUS_HASHDIFF:
     is_hashdiff: true
     columns:
-      - 'SHIPMENT_EXTERNAL_ID'
       - 'OLD_STATUS'
       - 'NEW_STATUS'
       - 'CHANGE_REASON'
+      - 'CHANGED_BY'
+      - 'LOCATION_TYPE'
+      - 'LOCATION_CODE'
+      - 'CUSTOMER_NOTIFIED'
       - 'CHANGED_AT'
 {%- endset -%}
 
@@ -31,5 +34,9 @@ WITH staging AS (
 )
 
 SELECT *,
+       {% if var("load_date", none) %}
        ('{{ var("load_date") }}')::DATE AS LOAD_DATE
+       {% else %}
+       CURRENT_DATE AS LOAD_DATE
+       {% endif %}
 FROM staging
