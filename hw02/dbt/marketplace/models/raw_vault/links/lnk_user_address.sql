@@ -1,4 +1,4 @@
-{%- set source_model = "v_stg_users" -%}
+{%- set source_model = "v_stg_user_addresses" -%}
 {%- set src_pk = "LNK_USER_ADDRESS_HK" -%}
 {%- set src_fk = ["USER_HK", "ADDRESS_HK"] -%}
 {%- set src_ldts = "LOAD_DATE" -%}

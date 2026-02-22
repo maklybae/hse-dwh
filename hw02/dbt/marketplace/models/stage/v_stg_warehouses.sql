@@ -1,21 +1,25 @@
 {%- set yaml_metadata -%}
-source_model: 'raw_user_status_history'
+source_model: 'raw_warehouses'
 derived_columns:
-  RECORD_SOURCE: '!USER_SERVICE'
-  EFFECTIVE_FROM: 'CHANGED_AT'
+  RECORD_SOURCE: '!LOGISTICS_SERVICE'
+  EFFECTIVE_FROM: 'WAREHOUSE_EFFECTIVE_FROM'
 hashed_columns:
-  USER_HK: 'USER_EXTERNAL_ID'
-  SAT_USER_STATUS_HASHDIFF:
+  WAREHOUSE_HK: 'WAREHOUSE_CODE'
+  SAT_WAREHOUSE_DETAILS_HASHDIFF:
     is_hashdiff: true
     columns:
-      - 'OLD_STATUS'
-      - 'NEW_STATUS'
-      - 'CHANGE_REASON'
-      - 'CHANGED_BY'
-      - 'SESSION_ID'
-      - 'IP_ADDRESS'
-      - 'USER_AGENT'
-      - 'CHANGED_AT'
+      - 'WAREHOUSE_NAME'
+      - 'WAREHOUSE_TYPE'
+      - 'WAREHOUSE_COUNTRY'
+      - 'WAREHOUSE_REGION'
+      - 'WAREHOUSE_CITY'
+      - 'WAREHOUSE_STREET_ADDRESS'
+      - 'WAREHOUSE_POSTAL_CODE'
+      - 'WAREHOUSE_IS_ACTIVE'
+      - 'WAREHOUSE_MAX_CAPACITY'
+      - 'WAREHOUSE_OPERATING_HOURS'
+      - 'WAREHOUSE_CONTACT_PHONE'
+      - 'WAREHOUSE_MANAGER_NAME'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}

@@ -11,7 +11,8 @@ SELECT
     h.notes                                 AS NOTES,
     h.changed_at                            AS CHANGED_AT,
     h.changed_by                            AS CHANGED_BY,
-    h.session_id                            AS SESSION_ID
+    h.session_id                            AS SESSION_ID,
+    h.ip_address                            AS IP_ADDRESS
 
 FROM {{ source('order_service', 'order_status_history') }} AS h
 {% if load_date %}

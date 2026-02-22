@@ -1,4 +1,4 @@
-{%- set source_model = ["v_stg_users", "v_stg_orders", "v_stg_logistics"] -%}
+{%- set source_model = ["v_stg_user_addresses", "v_stg_orders", "v_stg_logistics"] -%}
 {%- set src_pk = "ADDRESS_HK" -%}
 {%- set src_nk = "ADDRESS_EXTERNAL_ID" -%}
 {%- set src_ldts = "LOAD_DATE" -%}

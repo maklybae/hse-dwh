@@ -2,8 +2,7 @@ version: 2
 
 sources:
   - name: order_service
-    database: <ORDER_SERVICE_DB>
-    schema: <ORDER_SERVICE_SCHEMA>
+    schema: order_service
     tables:
       - name: orders
       - name: order_items
@@ -11,16 +10,14 @@ sources:
       - name: products
 
   - name: user_service
-    database: <USER_SERVICE_DB>
-    schema: <USER_SERVICE_SCHEMA>
+    schema: user_service
     tables:
       - name: users
       - name: user_addresses
       - name: user_status_history
 
   - name: logistics_service
-    database: <LOGISTICS_SERVICE_DB>
-    schema: <LOGISTICS_SERVICE_SCHEMA>
+    schema: logistics_service
     tables:
       - name: shipments
       - name: shipment_movements
