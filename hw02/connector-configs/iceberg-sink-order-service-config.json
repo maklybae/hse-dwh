@@ -22,6 +22,11 @@
         "iceberg.s3.path-style-access": "true",
         "iceberg.s3.access-key-id": "minioadmin",
         "iceberg.s3.secret-access-key": "minioadmin",
-        "iceberg.s3.region": "us-east-1"
+        "iceberg.s3.region": "us-east-1",
+        "batch.size": "100",
+        "offset.flush.interval.ms": "10000",
+        "consumer.override.fetch.min.bytes": "1",
+        "consumer.override.fetch.max.wait.ms": "500",
+        "consumer.override.max.poll.records": "500"
     }
 }
