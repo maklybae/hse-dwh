@@ -389,6 +389,9 @@ services:
       CONFIG_STORAGE_TOPIC: debezium_configs
       OFFSET_STORAGE_TOPIC: debezium_offsets
       STATUS_STORAGE_TOPIC: debezium_statuses
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
     depends_on:
       debezium-kafka:
         condition: service_healthy
@@ -433,10 +436,13 @@ services:
 
 networks:
   postgres-ha-net:
+    name: postgres-ha-net
     external: true
   kafka-net:
+    name: kafka-net
     external: true
   dwh-net:
+    name: dwh-net
     external: true
 
 volumes:
