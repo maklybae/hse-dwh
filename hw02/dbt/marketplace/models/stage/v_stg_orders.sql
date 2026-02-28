@@ -58,6 +58,10 @@ hashed_columns:
       - 'PRODUCT_DIM_LENGTH_CM'
       - 'PRODUCT_DIM_WIDTH_CM'
       - 'PRODUCT_DIM_HEIGHT_CM'
+  RTS_ORDER_HASHDIFF:
+    is_hashdiff: true
+    columns:
+      - 'IS_DELETED'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}

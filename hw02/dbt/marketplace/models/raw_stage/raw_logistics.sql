@@ -1,6 +1,6 @@
 -- Shipment feed from SHIPMENTS table only.
 -- Warehouse and pickup point data loaded via separate raw feeds (raw_warehouses, raw_pickup_points).
--- Pass --vars '{"load_date": "YYYY-MM-DD"}' for incremental load.
+-- Pass --vars '{"load_date": "YYYY-MM-DD"}' for incremental load (filters by CDC event date).
 -- Omit the variable for a full initial load.
 {% set load_date = var("load_date", none) %}
 
@@ -23,9 +23,13 @@ SELECT
     s.recipient_name                        AS RECIPIENT_NAME,
     s.delivery_notes                        AS DELIVERY_NOTES,
     s.delivery_signature                    AS DELIVERY_SIGNATURE,
-    s.effective_from                        AS SHIPMENT_EFFECTIVE_FROM
+    s.effective_from                        AS SHIPMENT_EFFECTIVE_FROM,
+
+    -- CDC metadata
+    COALESCE(s.__deleted, false)              AS IS_DELETED,
+    CAST(s.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 
 FROM {{ source('logistics_service', 'shipments') }} AS s
 {% if load_date %}
-WHERE s.created_date::DATE = '{{ load_date }}'::DATE
+WHERE CAST(s.__source_ts_ms / 1000 AS TIMESTAMP)::DATE = '{{ load_date }}'::DATE
 {% endif %}

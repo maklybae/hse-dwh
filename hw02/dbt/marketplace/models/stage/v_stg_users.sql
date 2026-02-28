@@ -14,6 +14,10 @@ hashed_columns:
       - 'PHONE'
       - 'DATE_OF_BIRTH'
       - 'REGISTRATION_DATE'
+  RTS_USER_HASHDIFF:
+    is_hashdiff: true
+    columns:
+      - 'IS_DELETED'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}
