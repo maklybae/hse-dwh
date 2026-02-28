@@ -1,0 +1,4 @@
+SOURCE_SYSTEM_CODE,SOURCE_SYSTEM_NAME,SOURCE_SYSTEM_TYPE,CONTACT_OWNER,DESCRIPTION
+ORDER_SERVICE,Order Service,MICROSERVICE,order-team@company.com,Manages orders and products
+USER_SERVICE,User Service,MICROSERVICE,user-team@company.com,Manages users and addresses
+LOGISTICS_SERVICE,Logistics Service,MICROSERVICE,logistics-team@company.com,Manages shipments and warehouses
