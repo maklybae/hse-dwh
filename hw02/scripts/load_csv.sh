@@ -40,7 +40,7 @@ echo "Загрузка файла: $CSV_PATH"
 echo "Колонки: $COLUMNS"
 
 # Используем psql с командой \COPY, указывая колонки
-psql "$CONN_STRING" <<EOF
+psql -v ON_ERROR_STOP=1 "$CONN_STRING" <<EOF
 \COPY $TABLE_NAME ($COLUMNS) FROM '$CSV_PATH' WITH (FORMAT csv, HEADER true, DELIMITER ',');
 EOF
 
