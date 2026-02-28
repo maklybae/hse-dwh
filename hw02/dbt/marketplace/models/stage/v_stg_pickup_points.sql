@@ -20,6 +20,10 @@ hashed_columns:
       - 'PICKUP_POINT_OPERATING_HOURS'
       - 'PICKUP_POINT_CONTACT_PHONE'
       - 'PICKUP_POINT_PARTNER_NAME'
+  RTS_PICKUP_POINT_HASHDIFF:
+    is_hashdiff: true
+    columns:
+      - 'IS_DELETED'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}
