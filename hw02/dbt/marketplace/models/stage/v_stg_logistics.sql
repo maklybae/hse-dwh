@@ -41,6 +41,10 @@ hashed_columns:
       - 'RECIPIENT_NAME'
       - 'DELIVERY_NOTES'
       - 'DELIVERY_SIGNATURE'
+  RTS_SHIPMENT_HASHDIFF:
+    is_hashdiff: true
+    columns:
+      - 'IS_DELETED'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}

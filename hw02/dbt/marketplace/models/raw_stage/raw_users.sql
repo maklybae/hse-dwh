@@ -1,6 +1,9 @@
 -- Wide feed: USERS joined with USER_ADDRESSES.
--- Contains current user profiles and their registered addresses.
--- No date filter: loaded as a full snapshot each run.
+-- Contains user profiles and their registered addresses.
+-- Pass --vars '{"load_date": "YYYY-MM-DD"}' for incremental load (filters by CDC event date).
+-- Omit the variable for a full initial load.
+{% set load_date = var("load_date", none) %}
+
 SELECT
     -- USERS
     u.user_external_id                      AS USER_EXTERNAL_ID,
@@ -24,8 +27,15 @@ SELECT
     ua.postal_code                          AS POSTAL_CODE,
     ua.apartment                            AS APARTMENT,
     ua.is_default                           AS IS_DEFAULT_ADDRESS,
-    ua.effective_from                       AS ADDRESS_EFFECTIVE_FROM
+    ua.effective_from                       AS ADDRESS_EFFECTIVE_FROM,
+
+    -- CDC metadata
+    COALESCE(u.__deleted, false)              AS IS_DELETED,
+    CAST(u.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 
 FROM {{ source('user_service', 'users') }} AS u
 LEFT JOIN {{ source('user_service', 'user_addresses') }} AS ua
     ON ua.user_external_id = u.user_external_id
+{% if load_date %}
+WHERE CAST(u.__source_ts_ms / 1000 AS TIMESTAMP)::DATE = '{{ load_date }}'::DATE
+{% endif %}
