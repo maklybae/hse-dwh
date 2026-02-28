@@ -30,7 +30,7 @@ SELECT
     ua.effective_from                       AS ADDRESS_EFFECTIVE_FROM,
 
     -- CDC metadata
-    COALESCE(u.__deleted, false)              AS IS_DELETED,
+    COALESCE(CAST(u.__deleted AS BOOLEAN), false) AS IS_DELETED,
     CAST(u.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 
 FROM {{ source('user_service', 'users') }} AS u
