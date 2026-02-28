@@ -21,7 +21,7 @@ SELECT
     pp.created_at           AS PICKUP_POINT_CREATED_AT,
 
     -- CDC metadata
-    COALESCE(pp.__deleted, false) AS IS_DELETED,
+    COALESCE(CAST(pp.__deleted AS BOOLEAN), false) AS IS_DELETED,
     CAST(pp.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 FROM {{ source('logistics_service', 'pickup_points') }} AS pp
 {% if load_date %}

@@ -47,7 +47,7 @@ SELECT
     p.dimensions_height_cm                  AS PRODUCT_DIM_HEIGHT_CM,
 
     -- CDC metadata
-    COALESCE(o.__deleted, false)              AS IS_DELETED,
+    COALESCE(CAST(o.__deleted AS BOOLEAN), false) AS IS_DELETED,
     CAST(o.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 
 FROM {{ source('order_service', 'orders') }} AS o

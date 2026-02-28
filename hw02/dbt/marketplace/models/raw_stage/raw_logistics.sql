@@ -26,7 +26,7 @@ SELECT
     s.effective_from                        AS SHIPMENT_EFFECTIVE_FROM,
 
     -- CDC metadata
-    COALESCE(s.__deleted, false)              AS IS_DELETED,
+    COALESCE(CAST(s.__deleted AS BOOLEAN), false) AS IS_DELETED,
     CAST(s.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 
 FROM {{ source('logistics_service', 'shipments') }} AS s
