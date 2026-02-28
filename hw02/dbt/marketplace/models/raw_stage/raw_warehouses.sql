@@ -21,7 +21,7 @@ SELECT
     w.created_at            AS WAREHOUSE_CREATED_AT,
 
     -- CDC metadata
-    COALESCE(w.__deleted, false) AS IS_DELETED,
+    COALESCE(CAST(w.__deleted AS BOOLEAN), false) AS IS_DELETED,
     CAST(w.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 FROM {{ source('logistics_service', 'warehouses') }} AS w
 {% if load_date %}
