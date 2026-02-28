@@ -20,6 +20,10 @@ hashed_columns:
       - 'WAREHOUSE_OPERATING_HOURS'
       - 'WAREHOUSE_CONTACT_PHONE'
       - 'WAREHOUSE_MANAGER_NAME'
+  RTS_WAREHOUSE_HASHDIFF:
+    is_hashdiff: true
+    columns:
+      - 'IS_DELETED'
 {%- endset -%}
 
 {% set metadata_dict = fromyaml(yaml_metadata) %}

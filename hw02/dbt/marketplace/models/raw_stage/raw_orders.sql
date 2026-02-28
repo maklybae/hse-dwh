@@ -1,5 +1,5 @@
 -- Wide feed: ORDERS joined with ORDER_ITEMS and PRODUCTS.
--- Pass --vars '{"load_date": "YYYY-MM-DD"}' for incremental load.
+-- Pass --vars '{"load_date": "YYYY-MM-DD"}' for incremental load (filters by CDC event date).
 -- Omit the variable for a full initial load.
 {% set load_date = var("load_date", none) %}
 
@@ -44,7 +44,11 @@ SELECT
     p.weight_grams                          AS PRODUCT_WEIGHT_GRAMS,
     p.dimensions_length_cm                  AS PRODUCT_DIM_LENGTH_CM,
     p.dimensions_width_cm                   AS PRODUCT_DIM_WIDTH_CM,
-    p.dimensions_height_cm                  AS PRODUCT_DIM_HEIGHT_CM
+    p.dimensions_height_cm                  AS PRODUCT_DIM_HEIGHT_CM,
+
+    -- CDC metadata
+    COALESCE(o.__deleted, false)              AS IS_DELETED,
+    CAST(o.__source_ts_ms / 1000 AS TIMESTAMP) AS SOURCE_TIMESTAMP
 
 FROM {{ source('order_service', 'orders') }} AS o
 LEFT JOIN {{ source('order_service', 'order_items') }} AS oi
@@ -52,5 +56,5 @@ LEFT JOIN {{ source('order_service', 'order_items') }} AS oi
 LEFT JOIN {{ source('order_service', 'products') }} AS p
     ON p.product_sku = oi.product_sku
 {% if load_date %}
-WHERE o.order_date::DATE = '{{ load_date }}'::DATE
+WHERE CAST(o.__source_ts_ms / 1000 AS TIMESTAMP)::DATE = '{{ load_date }}'::DATE
 {% endif %}
