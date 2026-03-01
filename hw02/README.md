@@ -5,7 +5,7 @@
 1. Создать сети docker:
 
 ```bash
-./scripts/create_networks.sh
+./scripts/create-networks.sh
 ```
 
 2. Поднять DWH инфраструктуру:
@@ -20,16 +20,31 @@ docker-compose -f docker-compose-dwh.yaml up
 docker-compose -f docker-compose.yaml up
 ```
 
-1. Вставить [тестовые данные](https://clck.ru/3QCYgU):
+4. Вставить [тестовые данные](https://clck.ru/3QCYgU):
 
 ```bash
 ./scripts/load_all_csv.sh ~/path/to/mock_data
 ```
 
+При выполнении скрипта загружается одновременно достаточно большой объём данных (у нас это занимало ~1-1.5 минуты), наблюдали в админке minio и логах коннектора, как данные поступают в Iceberg-таблицы.
+
 5. Построить детальный слой DWH:
 
 ```bash
 ./dbt.sh build --profiles-dir .
+```
+
+6*. Spark SQL для проверки:
+
+```sql
+./scripts/spark-sql.sh
+```
+
+7. Остановить:
+
+```bash
+docker-compose -f docker-compose-dwh.yaml down
+docker-compose down
 ```
 
 ## Инфраструктура DWH
@@ -346,117 +361,6 @@ erDiagram
         STRING loaded_by
         STRING hash_diff
     }
-```
-
-## DMP процесс
-
-### Общая архитектура
-
-```
-PostgreSQL HA (Patroni) → Debezium CDC → Kafka → Spark Structured Streaming → Iceberg (MinIO)
-```
-
-DMP реализован как Spark Structured Streaming приложение (`dwh-spark/scripts/dmp_main.py`), которое непрерывно читает CDC-события из Kafka и раскладывает их по структурам Data Vault.
-
-### Потоковая обработка
-
-При старте DMP:
-
-1. **Инициализация схемы** — создаёт базу данных `dwh_detailed` и все 5 таблиц (2 Hub, 2 Satellite, 1 Link) через `CREATE TABLE IF NOT EXISTS`
-2. **Запуск стриминга** — параллельно запускаются 5 streaming queries:
-   - **User events** (топик `debezium-user-service.public.users`):
-     - Парсинг Debezium JSON через `get_json_object(value, "$.payload.after.*")`
-     - → `hub_user` (SHA-256 от `user_external_id`)
-     - → `sat_user_profile` (email, имя, телефон, дата рождения, регистрация + hash_diff)
-   - **Order events** (топик `debezium-order-service.public.orders`):
-     - → `hub_order` (SHA-256 от `order_external_id`)
-     - → `sat_order_details` (номер, дата, суммы, валюта + hash_diff)
-     - → `link_user_order` (SHA-256 от `user_external_id` + `order_external_id`)
-
-### Обработка типов Debezium
-
-| Тип в PostgreSQL   | Формат Debezium                         | Конвертация в Spark                     |
-| ------------------ | --------------------------------------- | --------------------------------------- |
-| `DATE`             | int (дни от epoch)                      | `date_add(to_date('1970-01-01'), days)` |
-| `TIMESTAMP`        | long (микросекунды)                     | `timestamp_micros(value)`               |
-| `NUMERIC`          | double (`decimal.handling.mode=double`) | прямое чтение                           |
-| `UUID` / `VARCHAR` | string                                  | прямое чтение                           |
-
-### Data Flow
-
-```mermaid
-sequenceDiagram
-    participant SRC as Source DB
-    participant DZ as Debezium
-    participant KF as Kafka
-    participant DMP as Spark DMP
-    participant DWH as Iceberg / MinIO
-
-    SRC->>DZ: WAL change event
-    DZ->>KF: CDC JSON (payload.after)
-    KF->>DMP: Structured Streaming read
-    DMP->>DMP: Parse JSON + конвертация типов
-    DMP->>DMP: Генерация SHA-256 ключей
-    DMP->>DWH: Append → Hub
-    DMP->>DWH: Append → Satellite (+ hash_diff)
-    DMP->>DWH: Append → Link
-```
-
-## MPP/S3 вместо PostgreSQL
-
-Вместо отдельного PostgreSQL для DWH используется связка **MinIO + Apache Iceberg + Apache Spark**:
-
-| Компонент                | Роль                                                   | Аналог в классическом DWH |
-| ------------------------ | ------------------------------------------------------ | ------------------------- |
-| **MinIO**                | S3-совместимое объектное хранилище                     | Дисковая подсистема СУБД  |
-| **Apache Iceberg**       | Табличный формат (ACID, schema evolution, time travel) | Storage engine            |
-| **Iceberg REST Catalog** | Каталог таблиц (встроенное хранилище метаданных)       | Системный каталог         |
-| **Apache Spark**         | Движок обработки (MPP)                                 | Query engine              |
-
-### Обоснование выбора
-
-- **Разделение storage и compute** — MinIO и Spark масштабируются независимо
-- **Iceberg ACID** — атомарные транзакции, schema evolution, time travel, partition evolution
-- **Parquet + Snappy** — колоночное хранение с компрессией, эффективно для аналитики
-- **Spark Structured Streaming** — нативная интеграция с Kafka для real-time загрузки
-- **Открытые стандарты** — нет vendor lock-in
-
-### Инфраструктура DWH (`docker-compose-dwh.yaml`)
-
-| Сервис         | Образ                         | Назначение               |
-| -------------- | ----------------------------- | ------------------------ |
-| `minio`        | `minio/minio`                 | S3-хранилище данных      |
-| `iceberg-rest` | `apache/iceberg-rest-fixture` | Iceberg REST Catalog     |
-| `spark-master` | `spark-with-iceberg:4.0.1`    | Координатор кластера     |
-| `spark-worker` | `spark-with-iceberg:4.0.1`    | Исполнитель задач        |
-| `dwh-dmp`      | `spark-with-iceberg:4.0.1`    | DMP streaming приложение |
-
-## Запуск
-
-### 1. Поднять источники + Kafka + Debezium
-
-```bash
-docker-compose up -d
-```
-
-### 2. Поднять DWH инфраструктуру
-
-```bash
-docker-compose -f docker-compose-dwh.yaml up -d
-```
-
-### 3. Вставить тестовые данные
-
-```bash
-./scripts/insert_mock_data.sh
-```
-
-### 4. Проверить данные в DWH
-
-```bash
-docker exec dwh-spark-master /opt/spark/bin/spark-submit \
-  --master 'local[*]' \
-  /opt/scripts/query_examples.py
 ```
 
 ### Остановка
