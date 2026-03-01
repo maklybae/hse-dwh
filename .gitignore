@@ -184,3 +184,6 @@ derby.log
 
 # Plans / internal working docs
 plans/
+
+# Mock data (CSV files for testing)
+hw02/mock_data/
