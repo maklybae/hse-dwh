@@ -390,6 +390,7 @@ services:
       OFFSET_STORAGE_TOPIC: debezium_offsets
       STATUS_STORAGE_TOPIC: debezium_statuses
       OFFSET_FLUSH_INTERVAL_MS: 7500
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx1g"
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
