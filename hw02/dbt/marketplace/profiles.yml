@@ -4,7 +4,7 @@ marketplace:
     dev:
       type: spark
       method: session
-      schema: default
+      schema: dwh_detailed
       host: NA  # not used for session method, but required by dbt-core
       server_side_parameters:
         # Spark cluster — driver в этом контейнере, executors на воркерах
