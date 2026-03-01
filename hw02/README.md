@@ -180,33 +180,31 @@ User ──1:N──> Order ──1:N──> Shipment ──N:1──> Warehouse
 | ------------------------------------------------ | --------------------------------- | --------------------------- |
 | `user_external_id`                               | **Hub** `hub_user`                | Бизнес-ключ пользователя    |
 | `order_external_id`                              | **Hub** `hub_order`               | Бизнес-ключ заказа          |
-| User → Order (через `user_external_id` в orders) | **Link** `link_user_order`        | Связь пользователь-заказ    |
-| email, имя, телефон, дата рождения, регистрация  | **Satellite** `sat_user_profile`  | Профиль пользователя (SCD2) |
-| номер заказа, дата, суммы, валюта                | **Satellite** `sat_order_details` | Детали заказа (SCD2)        |
+| User → Order (через `user_external_id` в orders) | **Link** `lnk_order_user`         | Связь пользователь-заказ    |
+| email, имя, телефон, дата рождения, регистрация  | **Satellite** `sat_user_details`  | Детали профиля пользователя |
+| ORDER_STATUS, суммы, валюта, метод оплаты        | **Satellite** `sat_order_details` | Детали заказа               |
 
 ## Детальный слой DWH (DDL)
 
-Все таблицы создаются в схеме `iceberg.dwh_detailed` в формате Apache Iceberg (Parquet + Snappy). Суррогатные ключи — SHA-256 хеши от бизнес-ключей (тип `STRING`, 64-символьная hex-строка). Использование STRING вместо целочисленного типа обусловлено тем, что `sha2()` в Spark возвращает hex-строку, которая не помещается в BIGINT.
+Все таблицы создаются в схеме `iceberg.default` в формате Apache Iceberg (Parquet + Snappy). Суррогатные ключи — SHA-256 хеши от бизнес-ключей (тип `STRING`, 64-символьная hex-строка). Использование STRING вместо целочисленного типа обусловлено тем, что `sha2()` в Spark возвращает hex-строку, которая не помещается в BIGINT.
 
 ### Hubs
 
 ```sql
 -- Бизнес-ключи пользователей
-CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.hub_user (
-    hub_user_id      STRING,      -- SHA-256(user_external_id)
-    user_external_id STRING,      -- бизнес-ключ
-    source_system_id STRING,      -- 'user-service'
-    load_date        TIMESTAMP,
-    loaded_by        STRING       -- 'dmp-spark'
+CREATE TABLE IF NOT EXISTS iceberg.default.hub_user (
+    USER_HK          STRING,      -- SHA-256(USER_EXTERNAL_ID), PK
+    USER_EXTERNAL_ID STRING,      -- бизнес-ключ
+    LOAD_DATE        TIMESTAMP,
+    RECORD_SOURCE    STRING        -- 'USER_SERVICE'
 ) USING iceberg;
 
 -- Бизнес-ключи заказов
-CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.hub_order (
-    hub_order_id      STRING,     -- SHA-256(order_external_id)
-    order_external_id STRING,     -- бизнес-ключ
-    source_system_id  STRING,     -- 'order-service'
-    load_date         TIMESTAMP,
-    loaded_by         STRING
+CREATE TABLE IF NOT EXISTS iceberg.default.hub_order (
+    ORDER_HK          STRING,     -- SHA-256(ORDER_EXTERNAL_ID), PK
+    ORDER_EXTERNAL_ID STRING,     -- бизнес-ключ
+    LOAD_DATE         TIMESTAMP,
+    RECORD_SOURCE     STRING       -- 'ORDER_SERVICE'
 ) USING iceberg;
 ```
 
@@ -214,154 +212,475 @@ CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.hub_order (
 
 ```sql
 -- Связь пользователь → заказ
-CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.link_user_order (
-    link_user_order_id STRING,    -- SHA-256(user_external_id || order_external_id)
-    hub_user_id        STRING,    -- FK → hub_user
-    hub_order_id       STRING,    -- FK → hub_order
-    source_system_id   STRING,
-    load_date          TIMESTAMP,
-    loaded_by          STRING
+CREATE TABLE IF NOT EXISTS iceberg.default.lnk_order_user (
+    LNK_ORDER_USER_HK STRING,     -- SHA-256(ORDER_HK || USER_HK), PK
+    ORDER_HK          STRING,     -- FK → hub_order
+    USER_HK           STRING,     -- FK → hub_user
+    LOAD_DATE         TIMESTAMP,
+    RECORD_SOURCE     STRING
 ) USING iceberg;
 ```
 
 ### Satellites
 
 ```sql
--- Профиль пользователя (SCD Type 2)
-CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.sat_user_profile (
-    sat_id            STRING,     -- SHA-256(user_external_id || timestamp)
-    hub_user_id       STRING,     -- FK → hub_user
-    email             STRING,
-    first_name        STRING,
-    last_name         STRING,
-    phone             STRING,
-    date_of_birth     DATE,
-    registration_date TIMESTAMP,
-    load_date         TIMESTAMP,  -- начало действия версии
-    load_end_date     TIMESTAMP,  -- конец действия (NULL = актуальная)
-    is_current        BOOLEAN,    -- признак текущей версии
-    source_system_id  STRING,
-    loaded_by         STRING,
-    hash_diff         STRING      -- SHA-256 от бизнес-атрибутов
+-- Детали пользователя
+CREATE TABLE IF NOT EXISTS iceberg.default.sat_user_details (
+    USER_HK           STRING,     -- FK → hub_user
+    LOAD_DATE         TIMESTAMP,
+    RECORD_SOURCE     STRING,
+    HASHDIFF          STRING,     -- SHA-256 от бизнес-атрибутов
+    EFFECTIVE_FROM    TIMESTAMP,
+    FIRST_NAME        STRING,
+    LAST_NAME         STRING,
+    EMAIL             STRING,
+    PHONE             STRING,
+    DATE_OF_BIRTH     DATE,
+    REGISTRATION_DATE DATE
 ) USING iceberg;
 
--- Детали заказа (SCD Type 2)
-CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.sat_order_details (
-    sat_id            STRING,
-    hub_order_id      STRING,     -- FK → hub_order
-    order_number      STRING,
-    order_date        TIMESTAMP,
-    subtotal          DOUBLE,
-    tax_amount        DOUBLE,
-    shipping_cost     DOUBLE,
-    discount_amount   DOUBLE,
-    total_amount      DOUBLE,
-    currency          STRING,
-    load_date         TIMESTAMP,
-    load_end_date     TIMESTAMP,
-    is_current        BOOLEAN,
-    source_system_id  STRING,
-    loaded_by         STRING,
-    hash_diff         STRING
+-- Детали заказа
+CREATE TABLE IF NOT EXISTS iceberg.default.sat_order_details (
+    ORDER_HK               STRING,  -- FK → hub_order
+    LOAD_DATE              TIMESTAMP,
+    RECORD_SOURCE          STRING,
+    HASHDIFF               STRING,
+    EFFECTIVE_FROM         TIMESTAMP,
+    ORDER_STATUS           STRING,
+    SUBTOTAL               DOUBLE,
+    TAX_AMOUNT             DOUBLE,
+    SHIPPING_COST          DOUBLE,
+    DISCOUNT_AMOUNT        DOUBLE,
+    TOTAL_AMOUNT           DOUBLE,
+    CURRENCY               STRING,
+    DELIVERY_TYPE          STRING,
+    EXPECTED_DELIVERY_DATE DATE,
+    ACTUAL_DELIVERY_DATE   DATE,
+    PAYMENT_METHOD         STRING,
+    PAYMENT_STATUS         STRING
 ) USING iceberg;
 ```
 
 ### Конвенции нейминга
 
-| Тип       | Префикс | Суррогатный ключ                                | Пример                                  |
-| --------- | ------- | ----------------------------------------------- | --------------------------------------- |
-| Hub       | `hub_`  | `hub_<entity>_id` — SHA-256 от бизнес-ключа     | `hub_user`, `hub_order`                 |
-| Link      | `link_` | `link_<name>_id` — SHA-256 от комбинации ключей | `link_user_order`                       |
-| Satellite | `sat_`  | `sat_id` — SHA-256 от бизнес-ключа + timestamp  | `sat_user_profile`, `sat_order_details` |
+| Тип        | Префикс   | Суррогатный ключ                                      | Пример                                    |
+| ---------- | --------- | ----------------------------------------------------- | ----------------------------------------- |
+| Hub        | `hub_`    | `<ENTITY>_HK` — SHA-256 от бизнес-ключа              | `hub_user`, `hub_order`                   |
+| Link       | `lnk_`    | `LNK_<NAME>_HK` — SHA-256 от комбинации ключей       | `lnk_order_user`, `lnk_shipment_order`    |
+| Satellite  | `sat_`    | нет отдельного PK; идентифицируется по `<ENTITY>_HK` | `sat_user_details`, `sat_order_details`   |
+| RTS        | `rts_`    | нет отдельного PK; идентифицируется по `<ENTITY>_HK` | `rts_user`, `rts_order`                   |
+| T-Link     | `t_lnk_`  | `<NAME>_HK` — SHA-256 от PK + FK + payload           | `t_lnk_shipment_movement`                 |
 
 ### Технические поля
 
 Каждая таблица содержит:
 
-| Поле               | Тип       | Описание                                                  |
-| ------------------ | --------- | --------------------------------------------------------- |
-| `source_system_id` | STRING    | Идентификатор источника (`user-service`, `order-service`) |
-| `load_date`        | TIMESTAMP | Время загрузки записи                                     |
-| `loaded_by`        | STRING    | Процесс загрузки (`dmp-spark`)                            |
+| Поле            | Тип       | Описание                                                            |
+| --------------- | --------- | ------------------------------------------------------------------- |
+| `LOAD_DATE`     | TIMESTAMP | Дата загрузки записи в хранилище                                    |
+| `RECORD_SOURCE` | STRING    | Идентификатор источника (`USER_SERVICE`, `ORDER_SERVICE`, …)        |
 
-Дополнительно в Satellites:
+Дополнительно в Satellites и T-Links:
 
-| Поле            | Тип       | Описание                                           |
-| --------------- | --------- | -------------------------------------------------- |
-| `load_end_date` | TIMESTAMP | Время закрытия версии (NULL = актуальная)          |
-| `is_current`    | BOOLEAN   | Признак текущей версии                             |
-| `hash_diff`     | STRING    | SHA-256 от бизнес-атрибутов для детекции изменений |
+| Поле             | Тип       | Описание                                                    |
+| ---------------- | --------- | ----------------------------------------------------------- |
+| `HASHDIFF`       | STRING    | SHA-256 от бизнес-атрибутов для детекции изменений         |
+| `EFFECTIVE_FROM` | TIMESTAMP | Время начала действия версии записи (из источника)          |
 
 ## ER-диаграмма
 
 ```mermaid
 erDiagram
-    HUB_USER ||--o{ SAT_USER_PROFILE : "has versions"
-    HUB_USER ||--o{ LINK_USER_ORDER : "participates"
-    HUB_ORDER ||--o{ SAT_ORDER_DETAILS : "has versions"
-    HUB_ORDER ||--o{ LINK_USER_ORDER : "participates"
-
-    HUB_USER {
-        STRING hub_user_id PK
-        STRING user_external_id UK
-        STRING source_system_id
-        TIMESTAMP load_date
-        STRING loaded_by
+    hub_user {
+        string USER_HK PK
+        string USER_EXTERNAL_ID
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    hub_order {
+        string ORDER_HK PK
+        string ORDER_EXTERNAL_ID
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    hub_product {
+        string PRODUCT_HK PK
+        string PRODUCT_SKU
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    hub_address {
+        string ADDRESS_HK PK
+        string ADDRESS_EXTERNAL_ID
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    hub_shipment {
+        string SHIPMENT_HK PK
+        string SHIPMENT_EXTERNAL_ID
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    hub_warehouse {
+        string WAREHOUSE_HK PK
+        string WAREHOUSE_CODE
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    hub_pickup_point {
+        string PICKUP_POINT_HK PK
+        string PICKUP_POINT_CODE
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    hub_source_system {
+        string SOURCE_SYSTEM_HK PK
+        string SOURCE_SYSTEM_CODE
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_order_user {
+        string LNK_ORDER_USER_HK PK
+        string ORDER_HK FK
+        string USER_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_order_address {
+        string LNK_ORDER_ADDRESS_HK PK
+        string ORDER_HK FK
+        string ADDRESS_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_order_item {
+        string LNK_ORDER_ITEM_HK PK
+        string ORDER_HK FK
+        string PRODUCT_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_user_address {
+        string LNK_USER_ADDRESS_HK PK
+        string USER_HK FK
+        string ADDRESS_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_shipment_order {
+        string LNK_SHIPMENT_ORDER_HK PK
+        string SHIPMENT_HK FK
+        string ORDER_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_shipment_address {
+        string LNK_SHIPMENT_ADDRESS_HK PK
+        string SHIPMENT_HK FK
+        string ADDRESS_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_shipment_pickup_point {
+        string LNK_SHIPMENT_PICKUP_POINT_HK PK
+        string SHIPMENT_HK FK
+        string PICKUP_POINT_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    lnk_shipment_warehouse {
+        string LNK_SHIPMENT_WAREHOUSE_HK PK
+        string SHIPMENT_HK FK
+        string WAREHOUSE_HK FK
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    t_lnk_shipment_movement {
+        string SHIPMENT_MOVEMENT_HK PK
+        string SHIPMENT_HK FK
+        string MOVEMENT_TYPE
+        string LOCATION_CODE
+        timestamp MOVEMENT_DATETIME
+        float LATITUDE
+        float LONGITUDE
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_user_details {
+        string USER_HK FK
+        string HASHDIFF
+        string FIRST_NAME
+        string LAST_NAME
+        string EMAIL
+        string PHONE
+        date DATE_OF_BIRTH
+        date REGISTRATION_DATE
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_user_status {
+        string USER_HK FK
+        string HASHDIFF
+        string OLD_STATUS
+        string NEW_STATUS
+        string CHANGE_REASON
+        string CHANGED_BY
+        string SESSION_ID
+        string IP_ADDRESS
+        string USER_AGENT
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_order_details {
+        string ORDER_HK FK
+        string HASHDIFF
+        string ORDER_STATUS
+        decimal SUBTOTAL
+        decimal TAX_AMOUNT
+        decimal SHIPPING_COST
+        decimal DISCOUNT_AMOUNT
+        decimal TOTAL_AMOUNT
+        string CURRENCY
+        string DELIVERY_TYPE
+        date EXPECTED_DELIVERY_DATE
+        date ACTUAL_DELIVERY_DATE
+        string PAYMENT_METHOD
+        string PAYMENT_STATUS
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_order_status_history {
+        string ORDER_HK FK
+        string HASHDIFF
+        string NEW_STATUS
+        string CHANGE_REASON
+        string NOTES
+        string CHANGED_BY
+        string SESSION_ID
+        string IP_ADDRESS
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_product_details {
+        string PRODUCT_HK FK
+        string HASHDIFF
+        string PRODUCT_NAME
+        string PRODUCT_CATEGORY
+        string PRODUCT_BRAND
+        decimal PRODUCT_PRICE
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_product_logistics {
+        string PRODUCT_HK FK
+        string HASHDIFF
+        int WEIGHT_GRAMS
+        float DIM_LENGTH_CM
+        float DIM_WIDTH_CM
+        float DIM_HEIGHT_CM
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_address_details {
+        string ADDRESS_HK FK
+        string HASHDIFF
+        string ADDRESS_TYPE
+        string COUNTRY
+        string REGION
+        string CITY
+        string STREET_ADDRESS
+        string POSTAL_CODE
+        string APARTMENT
+        boolean IS_DEFAULT_ADDRESS
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_shipment_details {
+        string SHIPMENT_HK FK
+        string HASHDIFF
+        string SHIPMENT_STATUS
+        string TRACKING_NUMBER
+        int WEIGHT_GRAMS
+        int VOLUME_CUBIC_CM
+        int PACKAGE_COUNT
+        date DISPATCHED_DATE
+        date ESTIMATED_DELIVERY_DATE
+        date ACTUAL_DELIVERY_DATE
+        string RECIPIENT_NAME
+        string DELIVERY_NOTES
+        string DELIVERY_SIGNATURE
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_shipment_status {
+        string SHIPMENT_HK FK
+        string HASHDIFF
+        string OLD_STATUS
+        string NEW_STATUS
+        string CHANGE_REASON
+        string CHANGED_BY
+        string LOCATION_TYPE
+        string LOCATION_CODE
+        boolean CUSTOMER_NOTIFIED
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_warehouse_details {
+        string WAREHOUSE_HK FK
+        string HASHDIFF
+        string WAREHOUSE_NAME
+        string WAREHOUSE_TYPE
+        string COUNTRY
+        string REGION
+        string CITY
+        string STREET_ADDRESS
+        string POSTAL_CODE
+        boolean IS_ACTIVE
+        float MAX_CAPACITY
+        string CONTACT_PHONE
+        string MANAGER_NAME
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_pickup_point_details {
+        string PICKUP_POINT_HK FK
+        string HASHDIFF
+        string PICKUP_POINT_NAME
+        string PICKUP_POINT_TYPE
+        string COUNTRY
+        string REGION
+        string CITY
+        string STREET_ADDRESS
+        string POSTAL_CODE
+        boolean IS_ACTIVE
+        int MAX_CAPACITY
+        string CONTACT_PHONE
+        string PARTNER_NAME
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_source_system_details {
+        string SOURCE_SYSTEM_HK FK
+        string HASHDIFF
+        string SOURCE_SYSTEM_NAME
+        string SOURCE_SYSTEM_TYPE
+        string CONTACT_OWNER
+        string DESCRIPTION
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    sat_order_item_details {
+        string LNK_ORDER_ITEM_HK FK
+        string HASHDIFF
+        int QUANTITY
+        decimal UNIT_PRICE
+        decimal TOTAL_PRICE
+        string PRODUCT_NAME_SNAPSHOT
+        string PRODUCT_CATEGORY_SNAPSHOT
+        string PRODUCT_BRAND_SNAPSHOT
+        timestamp EFFECTIVE_FROM
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    rts_user {
+        string USER_HK FK
+        string HASHDIFF
+        boolean IS_DELETED
+        timestamp SOURCE_TIMESTAMP
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    rts_order {
+        string ORDER_HK FK
+        string HASHDIFF
+        boolean IS_DELETED
+        timestamp SOURCE_TIMESTAMP
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    rts_shipment {
+        string SHIPMENT_HK FK
+        string HASHDIFF
+        boolean IS_DELETED
+        timestamp SOURCE_TIMESTAMP
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    rts_warehouse {
+        string WAREHOUSE_HK FK
+        string HASHDIFF
+        boolean IS_DELETED
+        timestamp SOURCE_TIMESTAMP
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
+    }
+    rts_pickup_point {
+        string PICKUP_POINT_HK FK
+        string HASHDIFF
+        boolean IS_DELETED
+        timestamp SOURCE_TIMESTAMP
+        timestamp LOAD_DATE
+        string RECORD_SOURCE
     }
 
-    HUB_ORDER {
-        STRING hub_order_id PK
-        STRING order_external_id UK
-        STRING source_system_id
-        TIMESTAMP load_date
-        STRING loaded_by
-    }
-
-    LINK_USER_ORDER {
-        STRING link_user_order_id PK
-        STRING hub_user_id FK
-        STRING hub_order_id FK
-        STRING source_system_id
-        TIMESTAMP load_date
-        STRING loaded_by
-    }
-
-    SAT_USER_PROFILE {
-        STRING sat_id PK
-        STRING hub_user_id FK
-        STRING email
-        STRING first_name
-        STRING last_name
-        STRING phone
-        DATE date_of_birth
-        TIMESTAMP registration_date
-        TIMESTAMP load_date
-        TIMESTAMP load_end_date
-        BOOLEAN is_current
-        STRING source_system_id
-        STRING loaded_by
-        STRING hash_diff
-    }
-
-    SAT_ORDER_DETAILS {
-        STRING sat_id PK
-        STRING hub_order_id FK
-        STRING order_number
-        TIMESTAMP order_date
-        DOUBLE subtotal
-        DOUBLE tax_amount
-        DOUBLE shipping_cost
-        DOUBLE discount_amount
-        DOUBLE total_amount
-        STRING currency
-        TIMESTAMP load_date
-        TIMESTAMP load_end_date
-        BOOLEAN is_current
-        STRING source_system_id
-        STRING loaded_by
-        STRING hash_diff
-    }
+    hub_user ||--o{ sat_user_details : "USER_HK"
+    hub_user ||--o{ sat_user_status : "USER_HK"
+    hub_user ||--o{ rts_user : "USER_HK"
+    hub_order ||--o{ sat_order_details : "ORDER_HK"
+    hub_order ||--o{ sat_order_status_history : "ORDER_HK"
+    hub_order ||--o{ rts_order : "ORDER_HK"
+    hub_product ||--o{ sat_product_details : "PRODUCT_HK"
+    hub_product ||--o{ sat_product_logistics : "PRODUCT_HK"
+    hub_address ||--o{ sat_address_details : "ADDRESS_HK"
+    hub_shipment ||--o{ sat_shipment_details : "SHIPMENT_HK"
+    hub_shipment ||--o{ sat_shipment_status : "SHIPMENT_HK"
+    hub_shipment ||--o{ rts_shipment : "SHIPMENT_HK"
+    hub_warehouse ||--o{ sat_warehouse_details : "WAREHOUSE_HK"
+    hub_warehouse ||--o{ rts_warehouse : "WAREHOUSE_HK"
+    hub_pickup_point ||--o{ sat_pickup_point_details : "PICKUP_POINT_HK"
+    hub_pickup_point ||--o{ rts_pickup_point : "PICKUP_POINT_HK"
+    hub_source_system ||--o{ sat_source_system_details : "SOURCE_SYSTEM_HK"
+    hub_order ||--o{ lnk_order_user : "ORDER_HK"
+    hub_user ||--o{ lnk_order_user : "USER_HK"
+    hub_order ||--o{ lnk_order_address : "ORDER_HK"
+    hub_address ||--o{ lnk_order_address : "ADDRESS_HK"
+    hub_order ||--o{ lnk_order_item : "ORDER_HK"
+    hub_product ||--o{ lnk_order_item : "PRODUCT_HK"
+    hub_user ||--o{ lnk_user_address : "USER_HK"
+    hub_address ||--o{ lnk_user_address : "ADDRESS_HK"
+    hub_shipment ||--o{ lnk_shipment_order : "SHIPMENT_HK"
+    hub_order ||--o{ lnk_shipment_order : "ORDER_HK"
+    hub_shipment ||--o{ lnk_shipment_address : "SHIPMENT_HK"
+    hub_address ||--o{ lnk_shipment_address : "ADDRESS_HK"
+    hub_shipment ||--o{ lnk_shipment_pickup_point : "SHIPMENT_HK"
+    hub_pickup_point ||--o{ lnk_shipment_pickup_point : "PICKUP_POINT_HK"
+    hub_shipment ||--o{ lnk_shipment_warehouse : "SHIPMENT_HK"
+    hub_warehouse ||--o{ lnk_shipment_warehouse : "WAREHOUSE_HK"
+    lnk_order_item ||--o{ sat_order_item_details : "LNK_ORDER_ITEM_HK"
+    hub_shipment ||--o{ t_lnk_shipment_movement : "SHIPMENT_HK"
 ```
+
+## Lineage Graph
+
+![Lineage Graph 1](static/dbt-dag1.png)
+
+![Lineage Graph 2](static/dbt-dag2.png)
+
+![Lineage Graph 3](static/dbt-dag3.png)
+
+---
 
 ### Остановка
 
@@ -376,22 +695,19 @@ docker-compose down
 
 ```sql
 SELECT
-    hu.user_external_id,
-    sup.first_name,
-    sup.last_name,
-    sup.email,
-    ho.order_external_id,
-    sod.order_number,
-    sod.order_date,
-    sod.total_amount,
-    sod.currency
-FROM iceberg.dwh_detailed.link_user_order luo
-JOIN iceberg.dwh_detailed.hub_user hu ON luo.hub_user_id = hu.hub_user_id
-JOIN iceberg.dwh_detailed.hub_order ho ON luo.hub_order_id = ho.hub_order_id
-LEFT JOIN iceberg.dwh_detailed.sat_user_profile sup
-    ON hu.hub_user_id = sup.hub_user_id AND sup.is_current = true
-LEFT JOIN iceberg.dwh_detailed.sat_order_details sod
-    ON ho.hub_order_id = sod.hub_order_id AND sod.is_current = true;
+    hu.USER_EXTERNAL_ID,
+    sud.FIRST_NAME,
+    sud.LAST_NAME,
+    sud.EMAIL,
+    ho.ORDER_EXTERNAL_ID,
+    sod.ORDER_STATUS,
+    sod.TOTAL_AMOUNT,
+    sod.CURRENCY
+FROM iceberg.default.lnk_order_user lou
+JOIN iceberg.default.hub_user hu  ON lou.USER_HK  = hu.USER_HK
+JOIN iceberg.default.hub_order ho ON lou.ORDER_HK = ho.ORDER_HK
+LEFT JOIN iceberg.default.sat_user_details sud  ON hu.USER_HK  = sud.USER_HK
+LEFT JOIN iceberg.default.sat_order_details sod ON ho.ORDER_HK = sod.ORDER_HK;
 ```
 
 ### Web UI
