@@ -1,5 +1,73 @@
 # ДЗ-2: Data Warehouse
 
+## Быстрый старт
+
+1. Создать сети docker:
+
+```bash
+./scripts/create_networks.sh
+```
+
+2. Поднять DWH инфраструктуру:
+
+```bash
+docker-compose -f docker-compose-dwh.yaml up
+```
+
+3. Поднять все остальное (OLTP, Kafka, Debezium):
+
+```bash
+docker-compose -f docker-compose.yaml up
+```
+
+1. Вставить [тестовые данные](https://clck.ru/3QCYgU):
+
+```bash
+./scripts/load_all_csv.sh ~/path/to/mock_data
+```
+
+5. Построить детальный слой DWH:
+
+```bash
+./dbt.sh build --profiles-dir .
+```
+
+## Инфраструктура DWH
+
+Используется стек **MinIO (S3 API) + Apache Iceberg + Apache Spark**.
+
+## [dbt проект](dbt/)
+
+dbt-проект `marketplace` строит детальный слой DWH по методологии **Data Vault 2.0** с помощью макросов [AutomateDV](https://automate-dv.readthedocs.io/en/latest/) 0.11.5. Стек: **dbt-spark 1.10** → **Apache Spark 4.0** → **Apache Iceberg**.
+
+### Слои моделей
+
+| Слой        | Материализация | Описание                                                                               |
+| ----------- | -------------- | -------------------------------------------------------------------------------------- |
+| `raw_stage` | view           | Прямое чтение Iceberg-таблиц, созданных Kafka Connect из CDC-топиков                   |
+| `stage`     | view           | Хеширование ключей (SHA-256), маппинг атрибутов, фильтрация дублей и удалённых записей |
+| `raw_vault` | incremental    | Hubs, Links, Satellites, T-Links, Record Tracking Satellites                           |
+
+### Источники данных (CDC → Iceberg)
+
+Три микросервиса доставляют данные через **Debezium → Kafka → Iceberg Sink Connector**:
+
+- **order_service** — `orders`, `order_items`, `order_status_history`, `products`
+- **user_service** — `users`, `user_addresses`, `user_status_history`
+- **logistics_service** — `shipments`, `shipment_movements`, `shipment_status_history`, `warehouses`, `pickup_points`
+
+### Адаптация AutomateDV под Spark
+
+AutomateDV не имеет нативной поддержки Spark — только Snowflake, Databricks и Postgres. Для работы на Spark SQL созданы оверрайды через механизм `dispatch` (приоритет: `marketplace` → `automate_dv`):
+
+Макросы расположены по структуре, аналогичной AutomateDV (`macros/tables/spark/`, `macros/supporting/`, `macros/internal/`), чтобы упростить сравнение с оригиналом.
+
+### Запуск
+
+```bash
+./dbt.sh build --profiles-dir .
+```
+
 ## Архитектура DWH
 
 ### Выбор: Data Vault 2.0
@@ -12,10 +80,10 @@
 
 Предметная область представлена тремя микросервисами, каждый со своей PostgreSQL HA базой (Patroni + Etcd + HAProxy):
 
-| Источник | Порт | Debezium topic prefix | Основные таблицы |
-|---|---|---|---|
-| **User Service** | 5432 | `debezium-user-service` | `users` |
-| **Order Service** | 5433 | `debezium-order-service` | `orders` |
+| Источник              | Порт | Debezium topic prefix        | Основные таблицы          |
+| --------------------- | ---- | ---------------------------- | ------------------------- |
+| **User Service**      | 5432 | `debezium-user-service`      | `users`                   |
+| **Order Service**     | 5433 | `debezium-order-service`     | `orders`                  |
 | **Logistics Service** | 5434 | `debezium-logistics-service` | `warehouses`, `shipments` |
 
 ### Сущности и атрибуты
@@ -24,62 +92,62 @@
 
 Пользователь системы — центральная сущность, к которой привязаны заказы.
 
-| Атрибут | Тип | Описание |
-|---|---|---|
-| `user_external_id` | UUID | **Бизнес-ключ** — внешний идентификатор |
-| `email` | VARCHAR | Email пользователя |
-| `first_name` | VARCHAR | Имя |
-| `last_name` | VARCHAR | Фамилия |
-| `phone` | VARCHAR | Телефон |
-| `date_of_birth` | DATE | Дата рождения |
-| `registration_date` | TIMESTAMP | Дата регистрации |
-| `status` | VARCHAR | Статус (`active`, `inactive`, …) |
+| Атрибут             | Тип       | Описание                                |
+| ------------------- | --------- | --------------------------------------- |
+| `user_external_id`  | UUID      | **Бизнес-ключ** — внешний идентификатор |
+| `email`             | VARCHAR   | Email пользователя                      |
+| `first_name`        | VARCHAR   | Имя                                     |
+| `last_name`         | VARCHAR   | Фамилия                                 |
+| `phone`             | VARCHAR   | Телефон                                 |
+| `date_of_birth`     | DATE      | Дата рождения                           |
+| `registration_date` | TIMESTAMP | Дата регистрации                        |
+| `status`            | VARCHAR   | Статус (`active`, `inactive`, …)        |
 
 #### Order (Order Service)
 
 Заказ — основная бизнес-операция, связывающая пользователя с покупкой.
 
-| Атрибут | Тип | Описание |
-|---|---|---|
-| `order_external_id` | UUID | **Бизнес-ключ** — внешний идентификатор заказа |
-| `user_external_id` | UUID | Ссылка на пользователя (FK → User) |
-| `order_number` | VARCHAR | Человекочитаемый номер заказа |
-| `order_date` | TIMESTAMP | Дата создания заказа |
-| `status` | VARCHAR | Статус (`pending`, `processing`, `completed`, …) |
-| `subtotal` | NUMERIC | Сумма до налогов/скидок |
-| `tax_amount` | NUMERIC | Налог |
-| `shipping_cost` | NUMERIC | Стоимость доставки |
-| `discount_amount` | NUMERIC | Скидка |
-| `total_amount` | NUMERIC | Итоговая сумма |
-| `currency` | VARCHAR | Валюта (`USD`, …) |
-| `payment_method` | VARCHAR | Способ оплаты |
-| `payment_status` | VARCHAR | Статус оплаты |
+| Атрибут             | Тип       | Описание                                         |
+| ------------------- | --------- | ------------------------------------------------ |
+| `order_external_id` | UUID      | **Бизнес-ключ** — внешний идентификатор заказа   |
+| `user_external_id`  | UUID      | Ссылка на пользователя (FK → User)               |
+| `order_number`      | VARCHAR   | Человекочитаемый номер заказа                    |
+| `order_date`        | TIMESTAMP | Дата создания заказа                             |
+| `status`            | VARCHAR   | Статус (`pending`, `processing`, `completed`, …) |
+| `subtotal`          | NUMERIC   | Сумма до налогов/скидок                          |
+| `tax_amount`        | NUMERIC   | Налог                                            |
+| `shipping_cost`     | NUMERIC   | Стоимость доставки                               |
+| `discount_amount`   | NUMERIC   | Скидка                                           |
+| `total_amount`      | NUMERIC   | Итоговая сумма                                   |
+| `currency`          | VARCHAR   | Валюта (`USD`, …)                                |
+| `payment_method`    | VARCHAR   | Способ оплаты                                    |
+| `payment_status`    | VARCHAR   | Статус оплаты                                    |
 
 #### Warehouse (Logistics Service)
 
 Склад — точка хранения и отгрузки товаров.
 
-| Атрибут | Тип | Описание |
-|---|---|---|
-| `warehouse_code` | VARCHAR | **Бизнес-ключ** — код склада |
-| `warehouse_name` | VARCHAR | Название |
-| `warehouse_type` | VARCHAR | Тип (`distribution`, `regional`, …) |
-| `country`, `city`, `street_address`, `postal_code` | VARCHAR | Адрес |
-| `contact_phone` | VARCHAR | Телефон |
-| `manager_name` | VARCHAR | Имя менеджера |
+| Атрибут                                            | Тип     | Описание                            |
+| -------------------------------------------------- | ------- | ----------------------------------- |
+| `warehouse_code`                                   | VARCHAR | **Бизнес-ключ** — код склада        |
+| `warehouse_name`                                   | VARCHAR | Название                            |
+| `warehouse_type`                                   | VARCHAR | Тип (`distribution`, `regional`, …) |
+| `country`, `city`, `street_address`, `postal_code` | VARCHAR | Адрес                               |
+| `contact_phone`                                    | VARCHAR | Телефон                             |
+| `manager_name`                                     | VARCHAR | Имя менеджера                       |
 
 #### Shipment (Logistics Service)
 
 Отправление — доставка заказа со склада.
 
-| Атрибут | Тип | Описание |
-|---|---|---|
-| `shipment_external_id` | UUID | **Бизнес-ключ** — внешний идентификатор |
-| `order_external_id` | UUID | Ссылка на заказ (FK → Order) |
-| `tracking_number` | VARCHAR | Трекинг-номер |
-| `status` | VARCHAR | Статус доставки |
-| `origin_warehouse_code` | VARCHAR | Склад отправки (FK → Warehouse) |
-| `estimated_delivery_date` | TIMESTAMP | Ожидаемая дата доставки |
+| Атрибут                   | Тип       | Описание                                |
+| ------------------------- | --------- | --------------------------------------- |
+| `shipment_external_id`    | UUID      | **Бизнес-ключ** — внешний идентификатор |
+| `order_external_id`       | UUID      | Ссылка на заказ (FK → Order)            |
+| `tracking_number`         | VARCHAR   | Трекинг-номер                           |
+| `status`                  | VARCHAR   | Статус доставки                         |
+| `origin_warehouse_code`   | VARCHAR   | Склад отправки (FK → Warehouse)         |
+| `estimated_delivery_date` | TIMESTAMP | Ожидаемая дата доставки                 |
 
 ### Связи между сущностями
 
@@ -93,13 +161,13 @@ User ──1:N──> Order ──1:N──> Shipment ──N:1──> Warehouse
 
 ### Маппинг на Data Vault 2.0
 
-| Источник | DV2.0 структура | Описание |
-|---|---|---|
-| `user_external_id` | **Hub** `hub_user` | Бизнес-ключ пользователя |
-| `order_external_id` | **Hub** `hub_order` | Бизнес-ключ заказа |
-| User → Order (через `user_external_id` в orders) | **Link** `link_user_order` | Связь пользователь-заказ |
-| email, имя, телефон, дата рождения, регистрация | **Satellite** `sat_user_profile` | Профиль пользователя (SCD2) |
-| номер заказа, дата, суммы, валюта | **Satellite** `sat_order_details` | Детали заказа (SCD2) |
+| Источник                                         | DV2.0 структура                   | Описание                    |
+| ------------------------------------------------ | --------------------------------- | --------------------------- |
+| `user_external_id`                               | **Hub** `hub_user`                | Бизнес-ключ пользователя    |
+| `order_external_id`                              | **Hub** `hub_order`               | Бизнес-ключ заказа          |
+| User → Order (через `user_external_id` в orders) | **Link** `link_user_order`        | Связь пользователь-заказ    |
+| email, имя, телефон, дата рождения, регистрация  | **Satellite** `sat_user_profile`  | Профиль пользователя (SCD2) |
+| номер заказа, дата, суммы, валюта                | **Satellite** `sat_order_details` | Детали заказа (SCD2)        |
 
 ## Детальный слой DWH (DDL)
 
@@ -185,29 +253,29 @@ CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.sat_order_details (
 
 ### Конвенции нейминга
 
-| Тип | Префикс | Суррогатный ключ | Пример |
-|---|---|---|---|
-| Hub | `hub_` | `hub_<entity>_id` — SHA-256 от бизнес-ключа | `hub_user`, `hub_order` |
-| Link | `link_` | `link_<name>_id` — SHA-256 от комбинации ключей | `link_user_order` |
-| Satellite | `sat_` | `sat_id` — SHA-256 от бизнес-ключа + timestamp | `sat_user_profile`, `sat_order_details` |
+| Тип       | Префикс | Суррогатный ключ                                | Пример                                  |
+| --------- | ------- | ----------------------------------------------- | --------------------------------------- |
+| Hub       | `hub_`  | `hub_<entity>_id` — SHA-256 от бизнес-ключа     | `hub_user`, `hub_order`                 |
+| Link      | `link_` | `link_<name>_id` — SHA-256 от комбинации ключей | `link_user_order`                       |
+| Satellite | `sat_`  | `sat_id` — SHA-256 от бизнес-ключа + timestamp  | `sat_user_profile`, `sat_order_details` |
 
 ### Технические поля
 
 Каждая таблица содержит:
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `source_system_id` | STRING | Идентификатор источника (`user-service`, `order-service`) |
-| `load_date` | TIMESTAMP | Время загрузки записи |
-| `loaded_by` | STRING | Процесс загрузки (`dmp-spark`) |
+| Поле               | Тип       | Описание                                                  |
+| ------------------ | --------- | --------------------------------------------------------- |
+| `source_system_id` | STRING    | Идентификатор источника (`user-service`, `order-service`) |
+| `load_date`        | TIMESTAMP | Время загрузки записи                                     |
+| `loaded_by`        | STRING    | Процесс загрузки (`dmp-spark`)                            |
 
 Дополнительно в Satellites:
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `load_end_date` | TIMESTAMP | Время закрытия версии (NULL = актуальная) |
-| `is_current` | BOOLEAN | Признак текущей версии |
-| `hash_diff` | STRING | SHA-256 от бизнес-атрибутов для детекции изменений |
+| Поле            | Тип       | Описание                                           |
+| --------------- | --------- | -------------------------------------------------- |
+| `load_end_date` | TIMESTAMP | Время закрытия версии (NULL = актуальная)          |
+| `is_current`    | BOOLEAN   | Признак текущей версии                             |
+| `hash_diff`     | STRING    | SHA-256 от бизнес-атрибутов для детекции изменений |
 
 ## ER-диаграмма
 
@@ -307,12 +375,12 @@ DMP реализован как Spark Structured Streaming приложение 
 
 ### Обработка типов Debezium
 
-| Тип в PostgreSQL | Формат Debezium | Конвертация в Spark |
-|---|---|---|
-| `DATE` | int (дни от epoch) | `date_add(to_date('1970-01-01'), days)` |
-| `TIMESTAMP` | long (микросекунды) | `timestamp_micros(value)` |
-| `NUMERIC` | double (`decimal.handling.mode=double`) | прямое чтение |
-| `UUID` / `VARCHAR` | string | прямое чтение |
+| Тип в PostgreSQL   | Формат Debezium                         | Конвертация в Spark                     |
+| ------------------ | --------------------------------------- | --------------------------------------- |
+| `DATE`             | int (дни от epoch)                      | `date_add(to_date('1970-01-01'), days)` |
+| `TIMESTAMP`        | long (микросекунды)                     | `timestamp_micros(value)`               |
+| `NUMERIC`          | double (`decimal.handling.mode=double`) | прямое чтение                           |
+| `UUID` / `VARCHAR` | string                                  | прямое чтение                           |
 
 ### Data Flow
 
@@ -338,12 +406,12 @@ sequenceDiagram
 
 Вместо отдельного PostgreSQL для DWH используется связка **MinIO + Apache Iceberg + Apache Spark**:
 
-| Компонент | Роль | Аналог в классическом DWH |
-|---|---|---|
-| **MinIO** | S3-совместимое объектное хранилище | Дисковая подсистема СУБД |
-| **Apache Iceberg** | Табличный формат (ACID, schema evolution, time travel) | Storage engine |
-| **Iceberg REST Catalog** | Каталог таблиц (встроенное хранилище метаданных) | Системный каталог |
-| **Apache Spark** | Движок обработки (MPP) | Query engine |
+| Компонент                | Роль                                                   | Аналог в классическом DWH |
+| ------------------------ | ------------------------------------------------------ | ------------------------- |
+| **MinIO**                | S3-совместимое объектное хранилище                     | Дисковая подсистема СУБД  |
+| **Apache Iceberg**       | Табличный формат (ACID, schema evolution, time travel) | Storage engine            |
+| **Iceberg REST Catalog** | Каталог таблиц (встроенное хранилище метаданных)       | Системный каталог         |
+| **Apache Spark**         | Движок обработки (MPP)                                 | Query engine              |
 
 ### Обоснование выбора
 
@@ -355,13 +423,13 @@ sequenceDiagram
 
 ### Инфраструктура DWH (`docker-compose-dwh.yaml`)
 
-| Сервис | Образ | Назначение |
-|---|---|---|
-| `minio` | `minio/minio` | S3-хранилище данных |
-| `iceberg-rest` | `apache/iceberg-rest-fixture` | Iceberg REST Catalog |
-| `spark-master` | `spark-with-iceberg:4.0.1` | Координатор кластера |
-| `spark-worker` | `spark-with-iceberg:4.0.1` | Исполнитель задач |
-| `dwh-dmp` | `spark-with-iceberg:4.0.1` | DMP streaming приложение |
+| Сервис         | Образ                         | Назначение               |
+| -------------- | ----------------------------- | ------------------------ |
+| `minio`        | `minio/minio`                 | S3-хранилище данных      |
+| `iceberg-rest` | `apache/iceberg-rest-fixture` | Iceberg REST Catalog     |
+| `spark-master` | `spark-with-iceberg:4.0.1`    | Координатор кластера     |
+| `spark-worker` | `spark-with-iceberg:4.0.1`    | Исполнитель задач        |
+| `dwh-dmp`      | `spark-with-iceberg:4.0.1`    | DMP streaming приложение |
 
 ## Запуск
 
@@ -424,10 +492,10 @@ LEFT JOIN iceberg.dwh_detailed.sat_order_details sod
 
 ### Web UI
 
-| Сервис | URL | Описание |
-|---|---|---|
-| MinIO Console | http://localhost:9001 | S3-хранилище (minioadmin/minioadmin) |
-| Iceberg REST Catalog | http://localhost:8181 | REST API каталога |
-| Spark Master | http://localhost:8080 | Spark кластер |
-| Spark Worker | http://localhost:8081 | Worker node |
+| Сервис               | URL                   | Описание                             |
+| -------------------- | --------------------- | ------------------------------------ |
+| MinIO Console        | http://localhost:9001 | S3-хранилище (minioadmin/minioadmin) |
+| Iceberg REST Catalog | http://localhost:8181 | REST API каталога                    |
+| Spark Master         | http://localhost:8080 | Spark кластер                        |
+| Spark Worker         | http://localhost:8081 | Worker node                          |
 
