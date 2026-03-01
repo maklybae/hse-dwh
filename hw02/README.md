@@ -43,8 +43,8 @@ docker-compose -f docker-compose.yaml up
 7. Остановить:
 
 ```bash
-docker-compose -f docker-compose-dwh.yaml down
-docker-compose down
+docker-compose down -v
+docker-compose -f docker-compose-dwh.yaml down -v
 ```
 
 ## Инфраструктура DWH
@@ -685,8 +685,8 @@ erDiagram
 ### Остановка
 
 ```bash
-docker-compose -f docker-compose-dwh.yaml down
-docker-compose down
+docker-compose down -v
+docker-compose -f docker-compose-dwh.yaml down -v
 ```
 
 ## Проверка работоспособности
