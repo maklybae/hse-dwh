@@ -9,6 +9,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Suppress "Found orphan containers" warning — they belong to docker-compose.yaml
+export COMPOSE_IGNORE_ORPHANS=true
+
 # Default dbt args if none provided
 DBT_ARGS=("${@:-"--help"}")
 

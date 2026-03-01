@@ -225,6 +225,7 @@ services:
     environment:
       - SPARK_HOME=/opt/spark
       - SPARK_CONF_DIR=/opt/spark/conf
+      - AWS_REGION=us-east-1
     volumes:
       - ./dwh-spark/conf:/opt/spark/conf:ro
       - ./dbt/marketplace:/dbt/project
