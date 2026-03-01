@@ -1,5 +1,36 @@
 # ДЗ-2: Data Warehouse
 
+## Основная информация
+
+**Состав команды:**
+
+- Зенин Вадим (tg: [@zuganin](https://t.me/zuganin))
+- Клычков Максим (tg: [@maklybae](https://t.me/maklybae))
+- Сёмкин Арсений (tg: [@arsemkin](https://t.me/arsemkin))
+
+**Выполненные пункты задания:**
+
+| # | Пункт | Комментарий |
+|---|-------|-------------|
+| 1 | DDL для детального слоя DWH | Финальная схема в разделе [Детальный слой DWH (DDL)](#детальный-слой-dwh-ddl); DDL генерируется dbt |
+| 2 | ER-диаграмма | Mermaid-диаграмма в разделе [ER-диаграмма](#er-диаграмма) |
+| 3 | Поднят инстанс DWH с инициализацией структуры | MinIO + Iceberg REST + Spark (бонус: не PostgreSQL, а Iceberg+S3) |
+| 4 | Debezium подключён к master-хостам | 3 CDC-коннектора через HAProxy к Patroni-кластерам |
+| 5 | DMP реализован и работает | Kafka → Iceberg Sink Connector → dbt Data Vault 2.0 (56 моделей) |
+| Б1 | Генератор кода / dbt | dbt + AutomateDV 0.11.5 — декларативные модели вместо ручных DDL |
+| Б2 | DWH не на PostgreSQL (MPP/S3) | MinIO (S3) + Apache Iceberg + Apache Spark 4.0 |
+| Б3 | Универсальный класс + yaml / dbt | dbt с макросами AutomateDV — модели описываются конфигами |
+
+**Подключение к базам данных (через HAProxy):**
+
+| Сервис | Host | Port (master) | Port (replica) | User | Password | DB |
+|--------|------|---------------|----------------|------|----------|----|
+| User Service | `localhost` | `5432` | `5332` | `postgres` | `postgres` | `postgres` |
+| Order Service | `localhost` | `5433` | `5333` | `postgres` | `postgres` | `postgres` |
+| Logistics Service | `localhost` | `5434` | `5334` | `postgres` | `postgres` | `postgres` |
+
+Пример connection string: `postgresql://postgres:postgres@localhost:5432/postgres`
+
 ## Быстрый старт
 
 1. Создать сети docker:
@@ -49,7 +80,15 @@ docker-compose -f docker-compose-dwh.yaml down -v
 
 ## Инфраструктура DWH
 
-Используется стек **MinIO (S3 API) + Apache Iceberg + Apache Spark**.
+Используется стек **MinIO (S3 API) + Apache Iceberg + Apache Spark** вместо отдельного инстанса PostgreSQL.
+
+**Обоснование выбора Iceberg+S3:**
+
+- **Масштабируемость хранения**: S3 (MinIO) отделяет storage от compute — данные хранятся в объектном хранилище и могут масштабироваться независимо от вычислительного кластера.
+- **Open Table Format**: Apache Iceberg обеспечивает ACID-транзакции, schema evolution, time travel и hidden partitioning поверх S3 — без привязки к конкретному движку.
+- **Data Vault 2.0 совместимость**: модель Data Vault опирается на INSERT-only паттерн, что идеально ложится на Iceberg (append-friendly, эффективный merge-on-read). JOIN-тяжёлые запросы обрабатываются Spark, а не самим хранилищем.
+- **Единый каталог**: Iceberg REST Catalog предоставляет централизованный метадата-менеджмент для таблиц из разных источников (CDC-staging + DWH detailed layer).
+- **Совместимость со стеком**: Kafka Connect Iceberg Sink Connector пишет CDC-данные напрямую в Iceberg-таблицы, исключая промежуточный staging в PostgreSQL.
 
 ## [dbt проект](dbt/)
 
@@ -186,13 +225,13 @@ User ──1:N──> Order ──1:N──> Shipment ──N:1──> Warehouse
 
 ## Детальный слой DWH (DDL)
 
-Все таблицы создаются в схеме `iceberg.default` в формате Apache Iceberg (Parquet + Snappy). Суррогатные ключи — SHA-256 хеши от бизнес-ключей (тип `STRING`, 64-символьная hex-строка). Использование STRING вместо целочисленного типа обусловлено тем, что `sha2()` в Spark возвращает hex-строку, которая не помещается в BIGINT.
+Все таблицы создаются в схеме `iceberg.dwh_detailed` в формате Apache Iceberg (Parquet + Snappy). Суррогатные ключи — SHA-256 хеши от бизнес-ключей (тип `STRING`, 64-символьная hex-строка). Использование STRING вместо целочисленного типа обусловлено тем, что `sha2()` в Spark возвращает hex-строку, которая не помещается в BIGINT.
 
 ### Hubs
 
 ```sql
 -- Бизнес-ключи пользователей
-CREATE TABLE IF NOT EXISTS iceberg.default.hub_user (
+CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.hub_user (
     USER_HK          STRING,      -- SHA-256(USER_EXTERNAL_ID), PK
     USER_EXTERNAL_ID STRING,      -- бизнес-ключ
     LOAD_DATE        TIMESTAMP,
@@ -200,7 +239,7 @@ CREATE TABLE IF NOT EXISTS iceberg.default.hub_user (
 ) USING iceberg;
 
 -- Бизнес-ключи заказов
-CREATE TABLE IF NOT EXISTS iceberg.default.hub_order (
+CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.hub_order (
     ORDER_HK          STRING,     -- SHA-256(ORDER_EXTERNAL_ID), PK
     ORDER_EXTERNAL_ID STRING,     -- бизнес-ключ
     LOAD_DATE         TIMESTAMP,
@@ -212,7 +251,7 @@ CREATE TABLE IF NOT EXISTS iceberg.default.hub_order (
 
 ```sql
 -- Связь пользователь → заказ
-CREATE TABLE IF NOT EXISTS iceberg.default.lnk_order_user (
+CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.lnk_order_user (
     LNK_ORDER_USER_HK STRING,     -- SHA-256(ORDER_HK || USER_HK), PK
     ORDER_HK          STRING,     -- FK → hub_order
     USER_HK           STRING,     -- FK → hub_user
@@ -225,7 +264,7 @@ CREATE TABLE IF NOT EXISTS iceberg.default.lnk_order_user (
 
 ```sql
 -- Детали пользователя
-CREATE TABLE IF NOT EXISTS iceberg.default.sat_user_details (
+CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.sat_user_details (
     USER_HK           STRING,     -- FK → hub_user
     LOAD_DATE         TIMESTAMP,
     RECORD_SOURCE     STRING,
@@ -240,7 +279,7 @@ CREATE TABLE IF NOT EXISTS iceberg.default.sat_user_details (
 ) USING iceberg;
 
 -- Детали заказа
-CREATE TABLE IF NOT EXISTS iceberg.default.sat_order_details (
+CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.sat_order_details (
     ORDER_HK               STRING,  -- FK → hub_order
     LOAD_DATE              TIMESTAMP,
     RECORD_SOURCE          STRING,
@@ -703,11 +742,11 @@ SELECT
     sod.ORDER_STATUS,
     sod.TOTAL_AMOUNT,
     sod.CURRENCY
-FROM iceberg.default.lnk_order_user lou
-JOIN iceberg.default.hub_user hu  ON lou.USER_HK  = hu.USER_HK
-JOIN iceberg.default.hub_order ho ON lou.ORDER_HK = ho.ORDER_HK
-LEFT JOIN iceberg.default.sat_user_details sud  ON hu.USER_HK  = sud.USER_HK
-LEFT JOIN iceberg.default.sat_order_details sod ON ho.ORDER_HK = sod.ORDER_HK;
+FROM iceberg.dwh_detailed.lnk_order_user lou
+JOIN iceberg.dwh_detailed.hub_user hu  ON lou.USER_HK  = hu.USER_HK
+JOIN iceberg.dwh_detailed.hub_order ho ON lou.ORDER_HK = ho.ORDER_HK
+LEFT JOIN iceberg.dwh_detailed.sat_user_details sud  ON hu.USER_HK  = sud.USER_HK
+LEFT JOIN iceberg.dwh_detailed.sat_order_details sod ON ho.ORDER_HK = sod.ORDER_HK;
 ```
 
 ### Web UI
