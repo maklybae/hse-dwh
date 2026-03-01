@@ -143,6 +143,7 @@ services:
     entrypoint: ["/bin/sh", "/scripts/create-namespaces.sh"]
     command:
       - "default"
+      - "dwh_detailed"
       - "order_service"
       - "user_service"
       - "logistics_service"
