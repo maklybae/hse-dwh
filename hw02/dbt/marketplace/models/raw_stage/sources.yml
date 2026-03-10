@@ -1,0 +1,26 @@
+version: 2
+
+sources:
+  - name: order_service
+    schema: order_service
+    tables:
+      - name: orders
+      - name: order_items
+      - name: order_status_history
+      - name: products
+
+  - name: user_service
+    schema: user_service
+    tables:
+      - name: users
+      - name: user_addresses
+      - name: user_status_history
+
+  - name: logistics_service
+    schema: logistics_service
+    tables:
+      - name: shipments
+      - name: shipment_movements
+      - name: shipment_status_history
+      - name: warehouses
+      - name: pickup_points

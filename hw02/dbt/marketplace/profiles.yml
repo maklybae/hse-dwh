@@ -1,0 +1,37 @@
+marketplace:
+  target: dev
+  outputs:
+    dev:
+      type: spark
+      method: session
+      schema: dwh_detailed
+      host: NA  # not used for session method, but required by dbt-core
+      server_side_parameters:
+        # Spark cluster — driver в этом контейнере, executors на воркерах
+        "spark.master": "spark://spark-master:7077"
+        "spark.driver.host": "dwh-dbt"
+        "spark.driver.bindAddress": "0.0.0.0"
+
+        # Iceberg Catalog (REST) — внутренний хост
+        "spark.sql.catalog.iceberg": "org.apache.iceberg.spark.SparkCatalog"
+        "spark.sql.catalog.iceberg.type": "rest"
+        "spark.sql.catalog.iceberg.uri": "http://iceberg-rest:8181"
+        "spark.sql.catalog.iceberg.warehouse": "s3://warehouse/"
+        "spark.sql.catalog.iceberg.io-impl": "org.apache.iceberg.aws.s3.S3FileIO"
+        "spark.sql.catalog.iceberg.s3.endpoint": "http://minio:9000"
+        "spark.sql.catalog.iceberg.s3.path-style-access": "true"
+
+        # Iceberg Extensions
+        "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+
+        # Default catalog
+        "spark.sql.defaultCatalog": "iceberg"
+
+        # S3 / MinIO — внутренний хост
+        "spark.hadoop.fs.s3a.endpoint": "http://minio:9000"
+        "spark.hadoop.fs.s3a.access.key": "minioadmin"
+        "spark.hadoop.fs.s3a.secret.key": "minioadmin"
+        "spark.hadoop.fs.s3a.path.style.access": "true"
+        "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+        "spark.hadoop.fs.s3a.connection.ssl.enabled": "false"
+        "spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"

@@ -1,0 +1,16 @@
+{
+    "name": "user-service-debezium-connector",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "plugin.name": "pgoutput",
+        "database.hostname": "user-haproxy",
+        "database.port": "5432",
+        "database.user": "postgres",
+        "database.password": "postgres",
+        "database.dbname": "postgres",
+        "topic.prefix": "debezium-user-service",
+        "table.exclude.list": "public.goose_db_version",
+        "heartbeat.interval.ms": "5000",
+        "decimal.handling.mode": "double"
+    }
+}
