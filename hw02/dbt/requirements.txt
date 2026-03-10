@@ -1,0 +1,9 @@
+# dbt core + Spark adapter (session method — runs PySpark driver locally)
+dbt-core==1.11.6
+dbt-spark[session]==1.10.1
+
+# PySpark — must match the Spark version used in Docker cluster (apache/spark:4.0.1)
+pyspark==4.0.1
+
+# PostgreSQL adapter (if needed for other dbt targets)
+# dbt-postgres==1.10.0

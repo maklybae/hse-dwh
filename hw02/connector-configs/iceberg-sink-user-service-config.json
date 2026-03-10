@@ -1,0 +1,33 @@
+{
+    "name": "iceberg-sink-user-service",
+    "config": {
+        "connector.class": "com.getindata.kafka.connect.iceberg.sink.IcebergSink",
+        "tasks.max": "1",
+        "topics.regex": "debezium-user-service\\.public\\..*",
+        "transforms": "routeToTable",
+        "transforms.routeToTable.type": "org.apache.kafka.connect.transforms.RegexRouter",
+        "transforms.routeToTable.regex": "debezium-user-service\\.public\\.(.+)",
+        "transforms.routeToTable.replacement": "$1",
+        "upsert": "false",
+        "allow-field-addition": "true",
+        "table.auto-create": "true",
+        "table.namespace": "user_service",
+        "table.prefix": "",
+        "iceberg.name": "default",
+        "iceberg.type": "rest",
+        "iceberg.uri": "http://iceberg-rest:8181",
+        "iceberg.warehouse": "s3://warehouse/",
+        "iceberg.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
+        "iceberg.s3.endpoint": "http://minio:9000",
+        "iceberg.s3.path-style-access": "true",
+        "iceberg.s3.access-key-id": "minioadmin",
+        "iceberg.s3.secret-access-key": "minioadmin",
+        "iceberg.s3.region": "us-east-1",
+        "batch.size": "100",
+        "offset.flush.interval.ms": "7500",
+        "consumer.override.fetch.min.bytes": "1",
+        "consumer.override.fetch.max.wait.ms": "500",
+        "consumer.override.max.poll.records": "500",
+        "consumer.override.metadata.max.age.ms": "15000"
+    }
+}

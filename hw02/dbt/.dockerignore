@@ -1,0 +1,3 @@
+marketplace/target/
+marketplace/dbt_packages/
+marketplace/logs/
