@@ -1,0 +1,61 @@
+# scope: ${PATRONI_SCOPE}
+# name: ${PATRONI_NAME}
+
+watchdog:
+  mode: off
+
+etcd3:
+  host: etcd:2379
+
+restapi:
+  listen: 0.0.0.0:8008
+  # connect_address: ${PATRONI_RESTAPI_CONNECT_ADDRESS}
+  auth: "username:password"
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true # Required for Debezium CDC
+      parameters:
+        max_connections: 200
+        max_locks_per_transaction: 256
+        max_worker_processes: 8
+        wal_level: logical
+        max_replication_slots: 10
+        max_wal_senders: 10
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - local all all trust
+    - host replication replicator all md5
+    - host all all 0.0.0.0/0 md5
+
+postgresql:
+  pgpass: /var/lib/postgresql/.pgpass
+  listen: 0.0.0.0:5432
+  # connect_address: ${PATRONI_POSTGRESQL_CONNECT_ADDRESS}
+  data_dir: /var/lib/postgresql/data
+  pg_rewind:
+    username: postgres
+    password: postgres
+  pg_hba:
+    - local all all trust
+    - host replication replicator all md5
+    - host all all 0.0.0.0/0 md5
+  replication:
+    username: replicator
+    password: replicator
+  superuser:
+    username: postgres
+    password: postgres
+  admin:
+    username: admin
+    password: admin

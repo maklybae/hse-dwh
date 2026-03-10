@@ -116,7 +116,6 @@ profile_default/
 ipython_config.py
 
 # Docker
-.dockerignore
 docker-compose.override.yml
 *.log
 
@@ -143,7 +142,6 @@ mysql-data/
 mongo-data/
 
 # Database dumps
-*.sql
 *.dump
 *.bak
 *.backup
@@ -178,3 +176,14 @@ temp/
 *.pid
 *.seed
 *.pid.lock
+
+# Spark
+metastore_db/
+spark-warehouse/
+derby.log
+
+# Plans / internal working docs
+plans/
+
+# Mock data (CSV files for testing)
+hw02/mock_data/
