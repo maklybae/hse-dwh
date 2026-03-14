@@ -158,7 +158,7 @@ services:
       context: ./dwh-spark
       dockerfile: Dockerfile
     container_name: dwh-spark-thrift
-    command: /opt/spark/sbin/start-thriftserver.sh --wait
+    command: /opt/spark/bin/spark-submit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 --name "Thrift JDBC/ODBC Server"
     environment:
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=minioadmin
