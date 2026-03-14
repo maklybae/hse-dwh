@@ -1,0 +1,265 @@
+services:
+  # MinIO - S3-compatible object storage для хранения данных DWH
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
+    container_name: dwh-minio
+    ports:
+      - "9000:9000" # API endpoint
+      - "9001:9001" # Web Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - dwh-net
+
+  # Healthcheck для MinIO через отдельный контейнер с curl
+  minio-healthcheck:
+    image: curlimages/curl:8.18.0
+    container_name: dwh-minio-healthcheck
+    restart: "no"
+    depends_on:
+      - minio
+    command: >
+      sh -c "
+      max_attempts=30;
+      attempt=0;
+      until curl -fsS http://minio:9000/minio/health/ready || [ $$attempt -ge $$max_attempts ]; do
+        attempt=$$((attempt + 1));
+        echo \"Waiting for MinIO to be ready... ($$attempt/$$max_attempts)\";
+        sleep 2;
+      done;
+      if [ $$attempt -ge $$max_attempts ]; then
+        echo 'MinIO failed to become ready in time';
+        exit 1;
+      fi;
+      echo 'MinIO is ready!';
+      "
+    networks:
+      - dwh-net
+
+  # Создание buckets в MinIO
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: dwh-minio-init
+    restart: "no"
+    depends_on:
+      minio-healthcheck:
+        condition: service_completed_successfully
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb --ignore-existing myminio/warehouse;
+      echo 'MinIO buckets created successfully';
+      exit 0;
+      "
+    networks:
+      - dwh-net
+
+  # Iceberg REST Catalog - каталог для Iceberg таблиц
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture
+    container_name: dwh-iceberg-rest
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+    ports:
+      - "8181:8181"
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/v1/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Spark Master - координатор Spark кластера
+  spark-master:
+    build:
+      context: ./dwh-spark
+      dockerfile: Dockerfile
+    container_name: dwh-spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+    ports:
+      - "8080:8080" # Spark Master Web UI
+      - "7077:7077" # Spark Master port
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - ./dwh-spark/apps:/opt/spark-apps:rw
+      - ./dwh-spark/scripts:/opt/scripts:ro
+      - spark-ivy:/opt/spark/.ivy2
+    networks:
+      - dwh-net
+
+  # Spark Worker - исполнитель задач
+  spark-worker:
+    build:
+      context: ./dwh-spark
+      dockerfile: Dockerfile
+    container_name: dwh-spark-worker
+    depends_on:
+      - spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+    ports:
+      - "8081:8081" # Spark Worker Web UI
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - ./dwh-spark/apps:/opt/spark-apps:rw
+      - spark-ivy:/opt/spark/.ivy2
+    networks:
+      - dwh-net
+
+  # Создание namespace default в Iceberg каталоге
+  iceberg-init:
+    image: curlimages/curl:8.18.0
+    container_name: dwh-iceberg-init
+    restart: on-failure:2
+    environment:
+      BASE_URL: http://iceberg-rest:8181
+    depends_on:
+      iceberg-rest:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/create-namespaces.sh"]
+    command:
+      - "default"
+      - "dwh_detailed"
+      - "order_service"
+      - "user_service"
+      - "logistics_service"
+    volumes:
+      - ./scripts/create-namespaces.sh:/scripts/create-namespaces.sh:ro
+    networks:
+      - dwh-net
+
+  # Spark Thrift Server (HiveServer2) — точка входа для Metabase → SparkSQL
+  spark-thrift:
+    build:
+      context: ./dwh-spark
+      dockerfile: Dockerfile
+    container_name: dwh-spark-thrift
+    command: /opt/spark/bin/spark-submit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 --name "Thrift JDBC/ODBC Server"
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+    ports:
+      - "10000:10000" # HiveServer2 / Thrift
+      - "4040:4040"   # Spark UI
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - spark-thrift-ivy:/opt/spark/.ivy2
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 10000"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # PostgreSQL для хранения метаданных Metabase
+  metabase-db:
+    image: postgres:16-alpine
+    container_name: dwh-metabase-db
+    environment:
+      POSTGRES_USER: metabase
+      POSTGRES_PASSWORD: metabase
+      POSTGRES_DB: metabase
+    volumes:
+      - metabase-db-data:/var/lib/postgresql/data
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metabase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Metabase - BI инструмент для визуализации данных
+  metabase:
+    image: metabase/metabase:v0.53.7
+    container_name: dwh-metabase
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase
+      MB_DB_PASS: metabase
+      MB_DB_HOST: metabase-db
+    depends_on:
+      metabase-db:
+        condition: service_healthy
+      spark-thrift:
+        condition: service_healthy
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # dbt - запуск моделей Data Vault через Spark session
+  # Образ = только рантайм (Java + Spark + JARs + dbt).
+  # Проект монтируется — правки моделей видны без rebuild.
+  # Использование: docker compose run dwh-dbt run --profiles-dir .
+  dwh-dbt:
+    build:
+      context: ./dbt
+      dockerfile: Dockerfile
+    container_name: dwh-dbt
+    hostname: dwh-dbt
+    profiles:
+      - dbt
+    depends_on:
+      spark-master:
+        condition: service_started
+      iceberg-rest:
+        condition: service_healthy
+    environment:
+      - SPARK_HOME=/opt/spark
+      - SPARK_CONF_DIR=/opt/spark/conf
+      - AWS_REGION=us-east-1
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - ./dbt/marketplace:/dbt/project
+    networks:
+      - dwh-net
+    command: ["run", "--profiles-dir", "."]
+
+networks:
+  dwh-net:
+    name: dwh-net
+  kafka-net:
+    name: kafka-net
+    external: true
+
+volumes:
+  minio-data:
+  spark-ivy:
+  spark-thrift-ivy:
+  metabase-db-data:
