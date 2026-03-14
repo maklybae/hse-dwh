@@ -1,0 +1,57 @@
+{
+    "path_count": 372,
+    "parsed_path_count": 101,
+    "static_analysis_path_count": 55,
+    "static_analysis_parsed_path_count": 0,
+    "is_partial_parse_enabled": true,
+    "is_static_analysis_enabled": true,
+    "read_files_elapsed": 0.041005499893799424,
+    "load_macros_elapsed": 0.1213261669036001,
+    "parse_project_elapsed": 0.4794076250400394,
+    "patch_sources_elapsed": 1.7333077266812325e-05,
+    "process_manifest_elapsed": 0.00467591593042016,
+    "load_all_elapsed": 0.7259762920439243,
+    "projects": [
+        {
+            "project_name": "marketplace",
+            "elapsed": 0.47932354221120477,
+            "parsers": [
+                {
+                    "parser": "model",
+                    "elapsed": 0.4310290841385722,
+                    "parsed_path_count": 55
+                },
+                {
+                    "parser": "seed",
+                    "elapsed": 0.04828837490640581,
+                    "parsed_path_count": 1
+                }
+            ],
+            "parsed_path_count": 56
+        },
+        {
+            "project_name": "dbt_spark",
+            "elapsed": 0,
+            "parsers": [],
+            "parsed_path_count": 0
+        },
+        {
+            "project_name": "dbt",
+            "elapsed": 0,
+            "parsers": [],
+            "parsed_path_count": 0
+        },
+        {
+            "project_name": "dbt_utils",
+            "elapsed": 0,
+            "parsers": [],
+            "parsed_path_count": 0
+        },
+        {
+            "project_name": "automate_dv",
+            "elapsed": 7.91158527135849e-07,
+            "parsers": [],
+            "parsed_path_count": 0
+        }
+    ]
+}

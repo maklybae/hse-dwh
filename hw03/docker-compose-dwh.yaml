@@ -152,6 +152,77 @@ services:
     networks:
       - dwh-net
 
+  # Spark Thrift Server (HiveServer2) — точка входа для Metabase → SparkSQL
+  spark-thrift:
+    build:
+      context: ./dwh-spark
+      dockerfile: Dockerfile
+    container_name: dwh-spark-thrift
+    command: /opt/spark/sbin/start-thriftserver.sh --wait
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+    ports:
+      - "10000:10000" # HiveServer2 / Thrift
+      - "4040:4040"   # Spark UI
+    volumes:
+      - ./dwh-spark/conf:/opt/spark/conf:ro
+      - spark-thrift-ivy:/opt/spark/.ivy2
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 10000"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # PostgreSQL для хранения метаданных Metabase
+  metabase-db:
+    image: postgres:16-alpine
+    container_name: dwh-metabase-db
+    environment:
+      POSTGRES_USER: metabase
+      POSTGRES_PASSWORD: metabase
+      POSTGRES_DB: metabase
+    volumes:
+      - metabase-db-data:/var/lib/postgresql/data
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metabase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Metabase - BI инструмент для визуализации данных
+  metabase:
+    image: metabase/metabase:v0.53.7
+    container_name: dwh-metabase
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase
+      MB_DB_PASS: metabase
+      MB_DB_HOST: metabase-db
+    depends_on:
+      metabase-db:
+        condition: service_healthy
+      spark-thrift:
+        condition: service_healthy
+    networks:
+      - dwh-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   # dbt - запуск моделей Data Vault через Spark session
   # Образ = только рантайм (Java + Spark + JARs + dbt).
   # Проект монтируется — правки моделей видны без rebuild.
@@ -183,7 +254,6 @@ services:
 networks:
   dwh-net:
     name: dwh-net
-    external: true
   kafka-net:
     name: kafka-net
     external: true
@@ -191,3 +261,5 @@ networks:
 volumes:
   minio-data:
   spark-ivy:
+  spark-thrift-ivy:
+  metabase-db-data:
