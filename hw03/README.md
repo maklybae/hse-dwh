@@ -1,4 +1,4 @@
-# ДЗ-2: Data Warehouse
+# ДЗ-3: Финалочка
 
 ## Основная информация
 
@@ -8,28 +8,28 @@
 - Клычков Максим (tg: [@maklybae](https://t.me/maklybae))
 - Сёмкин Арсений (tg: [@arsemkin](https://t.me/arsemkin))
 
-**Выполненные пункты задания:**
+<!-- **Выполненные пункты задания:**
 
-| # | Пункт | Комментарий |
-|---|-------|-------------|
-| 1 | DDL для детального слоя DWH | Финальная схема в разделе [Детальный слой DWH (DDL)](#детальный-слой-dwh-ddl); DDL генерируется dbt |
-| 2 | ER-диаграмма | Mermaid-диаграмма в разделе [ER-диаграмма](#er-диаграмма) |
-| 3 | Поднят инстанс DWH с инициализацией структуры | MinIO + Iceberg REST + Spark (бонус: не PostgreSQL, а Iceberg+S3) |
-| 4 | Debezium подключён к master-хостам | 3 CDC-коннектора через HAProxy к Patroni-кластерам |
-| 5 | DMP реализован и работает | Kafka → Iceberg Sink Connector → dbt Data Vault 2.0 (56 моделей) |
-| Б1 | Генератор кода / dbt | dbt + AutomateDV 0.11.5 — декларативные модели вместо ручных DDL |
-| Б2 | DWH не на PostgreSQL (MPP/S3) | MinIO (S3) + Apache Iceberg + Apache Spark 4.0 |
-| Б3 | Универсальный класс + yaml / dbt | dbt с макросами AutomateDV — модели описываются конфигами |
+| #   | Пункт                                         | Комментарий                                                                                         |
+| --- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | DDL для детального слоя DWH                   | Финальная схема в разделе [Детальный слой DWH (DDL)](#детальный-слой-dwh-ddl); DDL генерируется dbt |
+| 2   | ER-диаграмма                                  | Mermaid-диаграмма в разделе [ER-диаграмма](#er-диаграмма)                                           |
+| 3   | Поднят инстанс DWH с инициализацией структуры | MinIO + Iceberg REST + Spark (бонус: не PostgreSQL, а Iceberg+S3)                                   |
+| 4   | Debezium подключён к master-хостам            | 3 CDC-коннектора через HAProxy к Patroni-кластерам                                                  |
+| 5   | DMP реализован и работает                     | Kafka → Iceberg Sink Connector → dbt Data Vault 2.0 (56 моделей)                                    |
+| Б1  | Генератор кода / dbt                          | dbt + AutomateDV 0.11.5 — декларативные модели вместо ручных DDL                                    |
+| Б2  | DWH не на PostgreSQL (MPP/S3)                 | MinIO (S3) + Apache Iceberg + Apache Spark 4.0                                                      |
+| Б3  | Универсальный класс + yaml / dbt              | dbt с макросами AutomateDV — модели описываются конфигами                                           |
 
 **Подключение к базам данных (через HAProxy):**
 
-| Сервис | Host | Port (master) | Port (replica) | User | Password | DB |
-|--------|------|---------------|----------------|------|----------|----|
-| User Service | `localhost` | `5432` | `5332` | `postgres` | `postgres` | `postgres` |
-| Order Service | `localhost` | `5433` | `5333` | `postgres` | `postgres` | `postgres` |
-| Logistics Service | `localhost` | `5434` | `5334` | `postgres` | `postgres` | `postgres` |
+| Сервис            | Host        | Port (master) | Port (replica) | User       | Password   | DB         |
+| ----------------- | ----------- | ------------- | -------------- | ---------- | ---------- | ---------- |
+| User Service      | `localhost` | `5432`        | `5332`         | `postgres` | `postgres` | `postgres` |
+| Order Service     | `localhost` | `5433`        | `5333`         | `postgres` | `postgres` | `postgres` |
+| Logistics Service | `localhost` | `5434`        | `5334`         | `postgres` | `postgres` | `postgres` |
 
-Пример connection string: `postgresql://postgres:postgres@localhost:5432/postgres`
+Пример connection string: `postgresql://postgres:postgres@localhost:5432/postgres` -->
 
 ## Быстрый старт
 
@@ -51,7 +51,13 @@ docker-compose -f docker-compose-dwh.yaml up
 docker-compose -f docker-compose.yaml up
 ```
 
-4. Вставить [тестовые данные](https://clck.ru/3QCYgU):
+4. Поднять Airflow:
+
+```bash
+DWH_HOST_ROOT=<локальный абсолютный путь до hw03> docker-compose -f airflow/docker-compose.yaml up
+```
+
+5. Вставить [тестовые данные](https://clck.ru/3QCYgU):
 
 ```bash
 ./scripts/load_all_csv.sh ~/path/to/mock_data
@@ -65,6 +71,8 @@ docker-compose -f docker-compose.yaml up
 ./dbt.sh build --profiles-dir .
 ```
 
+Или запустить DAG в [Airflow](http://localhost:80)
+
 6*. Spark SQL для проверки:
 
 ```sql
@@ -74,6 +82,7 @@ docker-compose -f docker-compose.yaml up
 7. Остановить:
 
 ```bash
+docker-compose -f airflow/docker-compose.yaml down -v
 docker-compose down -v
 docker-compose -f docker-compose-dwh.yaml down -v
 ```
@@ -302,29 +311,29 @@ CREATE TABLE IF NOT EXISTS iceberg.dwh_detailed.sat_order_details (
 
 ### Конвенции нейминга
 
-| Тип        | Префикс   | Суррогатный ключ                                      | Пример                                    |
-| ---------- | --------- | ----------------------------------------------------- | ----------------------------------------- |
-| Hub        | `hub_`    | `<ENTITY>_HK` — SHA-256 от бизнес-ключа              | `hub_user`, `hub_order`                   |
-| Link       | `lnk_`    | `LNK_<NAME>_HK` — SHA-256 от комбинации ключей       | `lnk_order_user`, `lnk_shipment_order`    |
-| Satellite  | `sat_`    | нет отдельного PK; идентифицируется по `<ENTITY>_HK` | `sat_user_details`, `sat_order_details`   |
-| RTS        | `rts_`    | нет отдельного PK; идентифицируется по `<ENTITY>_HK` | `rts_user`, `rts_order`                   |
-| T-Link     | `t_lnk_`  | `<NAME>_HK` — SHA-256 от PK + FK + payload           | `t_lnk_shipment_movement`                 |
+| Тип       | Префикс  | Суррогатный ключ                                     | Пример                                  |
+| --------- | -------- | ---------------------------------------------------- | --------------------------------------- |
+| Hub       | `hub_`   | `<ENTITY>_HK` — SHA-256 от бизнес-ключа              | `hub_user`, `hub_order`                 |
+| Link      | `lnk_`   | `LNK_<NAME>_HK` — SHA-256 от комбинации ключей       | `lnk_order_user`, `lnk_shipment_order`  |
+| Satellite | `sat_`   | нет отдельного PK; идентифицируется по `<ENTITY>_HK` | `sat_user_details`, `sat_order_details` |
+| RTS       | `rts_`   | нет отдельного PK; идентифицируется по `<ENTITY>_HK` | `rts_user`, `rts_order`                 |
+| T-Link    | `t_lnk_` | `<NAME>_HK` — SHA-256 от PK + FK + payload           | `t_lnk_shipment_movement`               |
 
 ### Технические поля
 
 Каждая таблица содержит:
 
-| Поле            | Тип       | Описание                                                            |
-| --------------- | --------- | ------------------------------------------------------------------- |
-| `LOAD_DATE`     | TIMESTAMP | Дата загрузки записи в хранилище                                    |
-| `RECORD_SOURCE` | STRING    | Идентификатор источника (`USER_SERVICE`, `ORDER_SERVICE`, …)        |
+| Поле            | Тип       | Описание                                                     |
+| --------------- | --------- | ------------------------------------------------------------ |
+| `LOAD_DATE`     | TIMESTAMP | Дата загрузки записи в хранилище                             |
+| `RECORD_SOURCE` | STRING    | Идентификатор источника (`USER_SERVICE`, `ORDER_SERVICE`, …) |
 
 Дополнительно в Satellites и T-Links:
 
-| Поле             | Тип       | Описание                                                    |
-| ---------------- | --------- | ----------------------------------------------------------- |
-| `HASHDIFF`       | STRING    | SHA-256 от бизнес-атрибутов для детекции изменений         |
-| `EFFECTIVE_FROM` | TIMESTAMP | Время начала действия версии записи (из источника)          |
+| Поле             | Тип       | Описание                                           |
+| ---------------- | --------- | -------------------------------------------------- |
+| `HASHDIFF`       | STRING    | SHA-256 от бизнес-атрибутов для детекции изменений |
+| `EFFECTIVE_FROM` | TIMESTAMP | Время начала действия версии записи (из источника) |
 
 ## ER-диаграмма
 
