@@ -5,11 +5,11 @@ marketplace:
       type: spark
       method: session
       schema: dwh_detailed
-      host: NA  # not used for session method, but required by dbt-core
+      host: NA # not used for session method, but required by dbt-core
       server_side_parameters:
         # Spark cluster — driver в этом контейнере, executors на воркерах
         "spark.master": "spark://spark-master:7077"
-        "spark.driver.host": "dwh-dbt"
+        "spark.driver.host": "{{ env_var('SPARK_DRIVER_HOST', 'dwh-dbt') }}"
         "spark.driver.bindAddress": "0.0.0.0"
 
         # Iceberg Catalog (REST) — внутренний хост
