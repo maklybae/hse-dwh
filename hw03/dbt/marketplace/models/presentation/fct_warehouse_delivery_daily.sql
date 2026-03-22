@@ -39,7 +39,7 @@ shipments_dedup as (
 
 shipments_for_day as (
     select
-        to_date(from_unixtime(cast(s.DISPATCHED_DATE as bigint))) as shipment_date,
+        to_date(from_unixtime(cast(s.DISPATCHED_DATE / 1000000 as bigint))) as shipment_date,
         cast(s.WAREHOUSE_CODE as string) as warehouse_id,
         s.ORDER_EXTERNAL_ID,
         s.PACKAGE_COUNT,
@@ -48,7 +48,7 @@ shipments_for_day as (
     cross join params p
     where s.rn = 1
       and s.DISPATCHED_DATE is not null
-            and to_date(from_unixtime(cast(s.DISPATCHED_DATE as bigint))) = p.business_date
+                        and to_date(from_unixtime(cast(s.DISPATCHED_DATE / 1000000 as bigint))) = p.business_date
 ),
 
 orders_dedup as (
@@ -103,7 +103,7 @@ shipment_facts as (
         cast(coalesce(s.PACKAGE_COUNT, 0) as decimal(18, 2)) as shipment_qty,
         case
             when o.ORDER_DATE is not null and s.DISPATCHED_DATE is not null
-            then (cast(s.DISPATCHED_DATE as double) - cast(o.ORDER_DATE as double)) / 60.0
+            then (cast(s.DISPATCHED_DATE as double) - cast(o.ORDER_DATE as double)) / 60000000.0
             else null
         end as processing_time_min
     from shipments_for_day s
