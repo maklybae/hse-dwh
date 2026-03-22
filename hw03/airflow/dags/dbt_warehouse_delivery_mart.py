@@ -4,9 +4,14 @@ from airflow.exceptions import AirflowException
 from docker.types import Mount
 from datetime import datetime, timedelta
 import os
+import uuid
 
 DBT_IMAGE = os.environ.get("DBT_IMAGE", "dwh-dbt:latest")
 DWH_NETWORK = os.environ.get("DWH_NETWORK", "dwh-net")
+SPARK_DRIVER_HOST = os.environ.get(
+    "SPARK_DRIVER_HOST",
+    f"dwh-dbt-airflow-{uuid.uuid4().hex[:8]}",
+)
 
 # Host path visible to Docker daemon (not path inside Airflow container).
 # Example: /Users/<user>/Programming/hse-dwh/hw03
@@ -41,6 +46,8 @@ with DAG(
     build_warehouse_delivery_mart = DockerOperator(
         task_id='build_warehouse_delivery_mart',
         image=DBT_IMAGE,
+        container_name=SPARK_DRIVER_HOST,
+        hostname=SPARK_DRIVER_HOST,
         command=[
             'build',
             '--profiles-dir', '.',
@@ -65,6 +72,7 @@ with DAG(
             'SPARK_HOME': '/opt/spark',
             'SPARK_CONF_DIR': '/opt/spark/conf',
             'AWS_REGION': 'us-east-1',
+            'SPARK_DRIVER_HOST': SPARK_DRIVER_HOST,
         },
         docker_url='unix://var/run/docker.sock',
         auto_remove='success',
