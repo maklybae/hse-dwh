@@ -2,7 +2,7 @@ from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.exceptions import AirflowException
 from docker.types import Mount
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 DBT_IMAGE = os.environ.get("DBT_IMAGE", "dwh-dbt:latest")
@@ -20,17 +20,33 @@ if not DWH_HOST_ROOT:
 SPARK_CONF_HOST_PATH = f"{DWH_HOST_ROOT}/dwh-spark/conf"
 DBT_PROJECT_HOST_PATH = f"{DWH_HOST_ROOT}/dbt/marketplace"
 
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
+
 with DAG(
-    dag_id='dbt_pipeline',
-    start_date=datetime(2024, 1, 1),
+    dag_id='dbt_warehouse_delivery_mart',
+    default_args=default_args,
+    description='Daily refresh of warehouse delivery performance mart',
+    start_date=datetime(2024, 1, 2),
     schedule='@daily',
     catchup=False,
+    max_active_runs=1,
+    tags=['dbt', 'presentation', 'warehouse_delivery'],
 ) as dag:
 
-    dbt_run = DockerOperator(
-        task_id='dbt_run',
+    build_warehouse_delivery_mart = DockerOperator(
+        task_id='build_warehouse_delivery_mart',
         image=DBT_IMAGE,
-        command=['build', '--profiles-dir', '.', '--exclude', 'tag:presentation'],
+        command=[
+            'build',
+            '--profiles-dir', '.',
+            '--select', '+fct_warehouse_delivery_daily',  # + включает upstream зависимости
+            '--vars', '{"business_date": "{{ ds }}"}',  # ds = execution_date в формате YYYY-MM-DD
+        ],
         network_mode=DWH_NETWORK,
         mounts=[
             Mount(

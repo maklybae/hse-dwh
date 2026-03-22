@@ -1,2 +1,2 @@
 !.env
-airflow.cfg
+config/airflow.cfg
