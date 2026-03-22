@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: fct_purchase_analytics_daily
+    description: "Daily purchase analytics mart based on order items. Supplier is derived from product brand."
+    columns:
+      - name: purchase_date
+        description: "Purchase date derived from order_date."
+        tests:
+          - not_null
+      - name: product_id
+        description: "Deterministic integer product identifier derived from product_sku."
+        tests:
+          - not_null
+      - name: product_name
+        description: "Product name."
+        tests:
+          - not_null
+      - name: category
+        description: "Product category."
+        tests:
+          - not_null
+      - name: supplier_id
+        description: "Deterministic supplier identifier derived from supplier_name (brand)."
+        tests:
+          - not_null
+      - name: supplier_name
+        description: "Supplier name (mapped from product brand)."
+        tests:
+          - not_null
+      - name: purchase_qty
+        description: "Total purchased quantity."
+      - name: total_purchase_amount
+        description: "Total purchase amount."
+      - name: avg_unit_price
+        description: "Weighted average unit purchase price."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - purchase_date
+              - product_id
+              - supplier_id
