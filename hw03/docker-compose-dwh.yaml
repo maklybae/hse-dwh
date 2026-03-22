@@ -160,6 +160,7 @@ services:
     build:
       context: ./dbt
       dockerfile: Dockerfile
+    image: dwh-dbt:latest
     container_name: dwh-dbt
     hostname: dwh-dbt
     profiles:
@@ -178,7 +179,7 @@ services:
       - ./dbt/marketplace:/dbt/project
     networks:
       - dwh-net
-    command: ["run", "--profiles-dir", "."]
+    command: ["build", "--profiles-dir", "."]
 
 networks:
   dwh-net:
